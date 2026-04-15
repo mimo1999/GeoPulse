@@ -13,8 +13,9 @@ build/
 .env
 .env.local
 
-# Data
-data/*
+# Data (generated cache and raw dumps — source files in data/ are tracked)
+data/real_cache/
+data/UCDP/
 
 # Models
 models/checkpoints/
