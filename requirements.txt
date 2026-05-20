@@ -38,6 +38,9 @@ pytest==8.3.3
 pytest-asyncio==0.24.0
 httpx==0.27.2
 
+# --- AUC/ranking metrics (added for multitask evaluation) ---
+scikit-learn==1.5.2              # already above; kept here for explicit multitask reference
+
 # --- Optional / future ---
 # shap==0.46.0                   # SHAP explainability (KernelExplainer fallback)
 # sentence-transformers==3.3.0   # for event embeddings
