@@ -1,5 +1,5 @@
-﻿"""
-FastAPI backend â€” Risk Inference Engine + MCP Endpoint.
+"""
+FastAPI backend — Risk Inference Engine + MCP Endpoint.
 
 Phase 1 routes:
     POST /riskscore              MCP-compatible risk score endpoint
@@ -65,7 +65,7 @@ DATABASE_URL = os.getenv(
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/checkpoints/run_phase1_best.pt")
 
-# Country code â†’ display name
+# Country code → display name
 try:
     from data.country_codes import code_to_name as _code_to_name
 except ImportError:
@@ -87,7 +87,7 @@ def _get_conn():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Backend starting â€” DB: %s", DATABASE_URL.split("@")[-1])
+    logger.info("Backend starting — DB: %s", DATABASE_URL.split("@")[-1])
 
     from inference.risk_scorer import RiskScorer
     scorer = RiskScorer(
@@ -249,7 +249,7 @@ def health_check():
 @app.post("/riskscore", response_model=RiskScoreResponse, tags=["MCP"])
 def get_risk_score(req: RiskScoreRequest):
     """
-    MCP-compatible endpoint â€” returns structured risk score for a country.
+    MCP-compatible endpoint — returns structured risk score for a country.
 
     This is the primary endpoint for downstream AI agents and dashboards.
     """
@@ -348,7 +348,7 @@ def get_country_timeline(
 @app.get("/global/heatmap", tags=["Data"])
 def get_global_heatmap():
     """
-    Latest risk score per country â€” used to render the world heatmap.
+    Latest risk score per country — used to render the world heatmap.
     """
     try:
         conn = _get_conn()
@@ -491,7 +491,7 @@ def get_ingestion_runs(limit: int = Query(default=20, ge=1, le=100)):
 @app.get("/ingestion/v2/status", tags=["Admin"])
 def get_v2_ingestion_status():
     """
-    Return GDELT v2 cursor statistics â€” how many files are pending/done/error
+    Return GDELT v2 cursor statistics — how many files are pending/done/error
     and total events inserted.
     """
     try:
@@ -525,7 +525,7 @@ def get_v2_ingestion_status():
 # Phase 2 Routes
 # ===========================================================================
 
-@app.get("/country/{country}/events", tags=["Phase 2 â€” Events"])
+@app.get("/country/{country}/events", tags=["Phase 2 — Events"])
 def get_country_events(
     country: str,
     days: int = Query(default=30, ge=1, le=180),
@@ -571,7 +571,7 @@ def get_country_events(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.get("/country/{country}/spillover", tags=["Phase 2 â€” Spillover"])
+@app.get("/country/{country}/spillover", tags=["Phase 2 — Spillover"])
 def get_country_spillover(
     country: str,
     top_n: int = Query(default=5, ge=1, le=20),
@@ -592,7 +592,7 @@ def get_country_spillover(
     }
 
 
-@app.get("/country/{country}/attributions", tags=["Phase 2 â€” Explainability"])
+@app.get("/country/{country}/attributions", tags=["Phase 2 — Explainability"])
 def get_country_attributions(
     country: str,
     target_date: Optional[date] = None,
@@ -611,7 +611,7 @@ def get_country_attributions(
             "country":      country,
             "date":         str(target_date),
             "attributions": None,
-            "message":      "Model not trained yet â€” attributions unavailable",
+            "message":      "Model not trained yet — attributions unavailable",
         }
 
     attr = attr_engine.fetch_attributions(country, target_date)
@@ -640,7 +640,7 @@ def get_country_attributions(
     }
 
 
-@app.get("/country/{country}/labels", tags=["Phase 2 â€” Labels"])
+@app.get("/country/{country}/labels", tags=["Phase 2 — Labels"])
 def get_country_labels(
     country: str,
     days: int = Query(default=90, ge=7, le=365),
@@ -676,7 +676,7 @@ class SpilloverTriggerRequest(BaseModel):
     window_days: int = Field(default=90, ge=30, le=365)
 
 
-@app.post("/analyze/spillover", tags=["Phase 2 â€” Admin"])
+@app.post("/analyze/spillover", tags=["Phase 2 — Admin"])
 def trigger_spillover(req: SpilloverTriggerRequest, background_tasks: BackgroundTasks):
     """Trigger spillover network computation (runs in background)."""
 
@@ -696,7 +696,7 @@ class LabelTriggerRequest(BaseModel):
     days: int = Field(default=30, ge=1, le=365)
 
 
-@app.post("/analyze/labels", tags=["Phase 2 â€” Admin"])
+@app.post("/analyze/labels", tags=["Phase 2 — Admin"])
 def trigger_label_generation(req: LabelTriggerRequest, background_tasks: BackgroundTasks):
     """Trigger proxy label generation for a date range."""
 
@@ -713,7 +713,7 @@ def trigger_label_generation(req: LabelTriggerRequest, background_tasks: Backgro
     return {"status": "triggered", "days": req.days}
 
 
-@app.post("/analyze/clusters", tags=["Phase 2 â€” Admin"])
+@app.post("/analyze/clusters", tags=["Phase 2 — Admin"])
 def trigger_event_clustering(background_tasks: BackgroundTasks):
     """Trigger event cluster computation for the last 7 days."""
 
@@ -730,5 +730,396 @@ def trigger_event_clustering(background_tasks: BackgroundTasks):
 
 
 # ===========================================================================
-# Phase 3 Routes â€” Escalation Forecasting, GNN, RAG Advisories
+# Phase 3 Routes — Escalation Forecasting, GNN, RAG Advisories
 # ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Pydantic schemas (Phase 3)
+# ---------------------------------------------------------------------------
+
+class ForecastStep(BaseModel):
+    step: int
+    target_date: str
+    risk_score: float
+    instability: float
+    war_probability: float
+    terrorism_risk: float
+    financial_stress: float
+    confidence: float
+    variance: float
+    lower_bound: float
+    upper_bound: float
+
+
+class ForecastResponse(BaseModel):
+    country: str
+    forecast_date: str
+    horizon_steps: int
+    forecasts: list[ForecastStep]
+    model_version: str
+
+
+class GNNInfluenceResponse(BaseModel):
+    country: str
+    contagion_score: float
+    risk_amplification: float
+    network_adjusted_risk: float
+    top_influencers: list[dict]
+
+
+class RAGAdvisoryResponse(BaseModel):
+    country: str
+    name: str = ""
+    advisory: str
+    retrieved_contexts: list[dict]
+    rag_confidence: float
+    level: str
+
+
+class ForecastTriggerRequest(BaseModel):
+    country: Optional[str] = None
+    as_of:   Optional[date] = None
+
+
+class GNNTriggerRequest(BaseModel):
+    as_of: Optional[date] = None
+
+
+class CorpusRebuildRequest(BaseModel):
+    country: Optional[str] = None
+    days: int = Field(default=90, ge=7, le=365)
+
+
+# ---------------------------------------------------------------------------
+# Forecasting routes
+# ---------------------------------------------------------------------------
+
+@app.get("/country/{country}/forecast", tags=["Phase 3 — Forecast"])
+def get_country_forecast(
+    country: str,
+    as_of: Optional[date] = None,
+):
+    """
+    Multi-step ahead risk forecast for a country.
+    Returns 4 bi-weekly predictions (≈ 14, 28, 42, 56 days ahead).
+    Falls back to trend extrapolation if the forecaster model is not trained.
+    """
+    forecaster = app.state.forecaster
+    if forecaster is None:
+        raise HTTPException(status_code=503, detail="Forecaster not available")
+
+    try:
+        result = forecaster.forecast(country, as_of=as_of, persist=True)
+        return result.to_dict()
+    except Exception as exc:
+        logger.error("Forecast error for %s: %s", country, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/global/escalation_alerts", tags=["Phase 3 — Forecast"])
+def get_escalation_alerts(
+    min_risk: float = Query(default=0.60, ge=0.0, le=1.0),
+    horizon_step: int = Query(default=1, ge=1, le=4),
+):
+    """
+    Countries predicted to exceed min_risk at the given horizon step.
+    Sorted by predicted risk descending.
+    """
+    try:
+        conn = _get_conn()
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT f.country, f.risk_score AS predicted_risk,
+                       f.confidence, f.target_date,
+                       l.risk_score AS current_risk
+                FROM country_escalation_forecasts f
+                LEFT JOIN latest_country_risk l ON l.country = f.country
+                WHERE f.forecast_date = (
+                    SELECT MAX(forecast_date) FROM country_escalation_forecasts
+                )
+                  AND f.horizon_step  = %s
+                  AND f.risk_score   >= %s
+                ORDER BY f.risk_score DESC
+                LIMIT 50
+            """, (horizon_step, min_risk))
+            rows = cur.fetchall()
+        conn.close()
+
+        alerts = []
+        for row in rows:
+            pred  = row["predicted_risk"]
+            conf  = row["confidence"]
+            tgt_date = row["target_date"]
+            curr  = row["current_risk"]
+            delta = round(float(pred) - float(curr or 0), 4)
+            alerts.append({
+                "country":        row["country"],
+                "name":           _code_to_name(row["country"]),
+                "predicted_risk": round(float(pred), 4),
+                "current_risk":   round(float(curr or 0), 4),
+                "delta":          delta,
+                "horizon_step":   horizon_step,
+                "confidence":     round(float(conf or 0), 4),
+                "target_date":    str(tgt_date),
+                "risk_score":     round(float(pred), 4),   # alias for Streamlit compat
+            })
+
+        return {"alerts": alerts, "total": len(alerts), "min_risk": min_risk}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/forecast/trigger", tags=["Phase 3 — Admin"])
+def trigger_forecast(req: ForecastTriggerRequest, background_tasks: BackgroundTasks):
+    """Trigger forecast computation for all countries (or one) in background."""
+
+    def _run():
+        forecaster = app.state.forecaster
+        if forecaster is None:
+            return
+        if req.country:
+            forecaster.forecast(req.country, as_of=req.as_of, persist=True)
+        else:
+            results = forecaster.forecast_all(as_of=req.as_of, persist=True)
+            logger.info("Forecast complete: %d countries", len(results))
+
+    background_tasks.add_task(_run)
+    return {
+        "status":  "triggered",
+        "country": req.country or "all",
+        "as_of":   str(req.as_of or date.today()),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GNN routes
+# ---------------------------------------------------------------------------
+
+@app.get("/country/{country}/gnn_influence", tags=["Phase 3 — GNN"])
+def get_gnn_influence(country: str):
+    """
+    GNN-based enrichment for a country: contagion score, risk amplification,
+    network-adjusted risk, and top influencing neighbours.
+    """
+    gnn = app.state.gnn_engine
+    if gnn is None:
+        raise HTTPException(status_code=503, detail="GNN engine not available")
+
+    enrichment = gnn.fetch_country_enrichment(country)
+    if not enrichment:
+        # Run on-demand for this single country
+        try:
+            results = gnn.enrich(persist=True)
+            enrichment = results.get(country, {})
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    if not enrichment:
+        raise HTTPException(status_code=404, detail=f"No GNN data for {country}")
+
+    influencers = gnn.get_top_influencers(country, top_n=5)
+    return GNNInfluenceResponse(
+        country=country,
+        contagion_score=enrichment.get("contagion_score", 0),
+        risk_amplification=enrichment.get("risk_amplification", 0),
+        network_adjusted_risk=enrichment.get("network_adjusted_risk", 0),
+        top_influencers=influencers,
+    )
+
+
+@app.get("/global/gnn_network", tags=["Phase 3 — GNN"])
+def get_gnn_network(
+    min_weight: float = Query(default=0.20, ge=0.0, le=1.0),
+):
+    """
+    Full node+edge list for GNN network visualisation.
+    Returns nodes (country + risk scores + contagion) and edges (spillover weights).
+    """
+    try:
+        conn = _get_conn()
+        with conn, conn.cursor() as cur:
+            # Nodes
+            cur.execute("""
+                SELECT g.country, g.contagion_score, g.risk_amplification,
+                       g.network_adjusted_risk, l.risk_score
+                FROM gnn_node_embeddings g
+                JOIN latest_country_risk l ON l.country = g.country
+                WHERE g.computed_date = (SELECT MAX(computed_date) FROM gnn_node_embeddings)
+            """)
+            node_rows = cur.fetchall()
+
+            # Edges
+            cur.execute("""
+                SELECT country_a, country_b, spillover_weight
+                FROM country_spillover
+                WHERE computed_date = (SELECT MAX(computed_date) FROM country_spillover)
+                  AND spillover_weight >= %s
+            """, (min_weight,))
+            edge_rows = cur.fetchall()
+
+        conn.close()
+
+        nodes = [
+            {
+                "country":               r["country"],
+                "name":                  _code_to_name(r["country"]),
+                "contagion_score":        round(float(r["contagion_score"] or 0), 4),
+                "risk_amplification":     round(float(r["risk_amplification"] or 0), 4),
+                "network_adjusted_risk":  round(float(r["network_adjusted_risk"] or 0), 4),
+                "risk_score":             round(float(r["risk_score"] or 0), 4),
+            }
+            for r in node_rows
+        ]
+        edges = [
+            {
+                "source":       r["country_a"],
+                "source_name":  _code_to_name(r["country_a"]),
+                "target":       r["country_b"],
+                "target_name":  _code_to_name(r["country_b"]),
+                "weight":       round(float(r["spillover_weight"]), 4),
+            }
+            for r in edge_rows
+        ]
+
+        return {"nodes": nodes, "edges": edges}
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/analyze/gnn", tags=["Phase 3 — Admin"])
+def trigger_gnn(req: GNNTriggerRequest, background_tasks: BackgroundTasks):
+    """Trigger GNN enrichment computation (background task)."""
+
+    def _run():
+        gnn = app.state.gnn_engine
+        if gnn is None:
+            return
+        results = gnn.enrich(as_of=req.as_of, persist=True)
+        logger.info("GNN enrichment complete: %d countries", len(results))
+
+    background_tasks.add_task(_run)
+    return {"status": "triggered", "as_of": str(req.as_of or date.today())}
+
+
+# ---------------------------------------------------------------------------
+# RAG Advisory routes
+# ---------------------------------------------------------------------------
+
+@app.get("/country/{country}/rag_advisory", tags=["Phase 3 — RAG"])
+def get_rag_advisory(
+    country: str,
+    include_retrieved: bool = Query(default=True),
+):
+    """
+    RAG-enhanced advisory for a country.
+    Enriches the rule-based advisory with retrieved historical analogues.
+    Includes forecast trajectory context if available.
+    """
+    rag = app.state.rag_engine
+    if rag is None:
+        raise HTTPException(status_code=503, detail="RAG engine not available")
+
+    # Get base scores from scorer
+    scorer = app.state.scorer
+    try:
+        pred = scorer.score(country)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Scoring error: {exc}")
+
+    # Get forecast trajectory if available
+    forecast_trajectory = None
+    forecaster = app.state.forecaster
+    if forecaster is not None:
+        try:
+            fc = forecaster.fetch_stored_forecast(country)
+            if fc:
+                forecast_trajectory = fc.risk_trajectory
+        except Exception:
+            pass
+
+    try:
+        advisory, retrieved = rag.generate(
+            country=country,
+            risk_score=pred.risk_score,
+            confidence=pred.confidence,
+            trend=pred.trend,
+            instability=pred.instability,
+            war=pred.war_probability,
+            terrorism=pred.terrorism_risk,
+            financial=pred.financial_stress,
+            forecast_trajectory=forecast_trajectory,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    from advisory.rule_engine import classify_risk
+    return RAGAdvisoryResponse(
+        country=country,
+        name=_code_to_name(country),
+        advisory=advisory.advisory_text,
+        retrieved_contexts=retrieved if include_retrieved else [],
+        rag_confidence=float(advisory.confidence),
+        level=advisory.level,
+    )
+
+
+@app.get("/advisory/corpus/stats", tags=["Phase 3 — RAG"])
+def get_corpus_stats():
+    """Return advisory corpus statistics."""
+    rag = app.state.rag_engine
+    if rag is None:
+        raise HTTPException(status_code=503, detail="RAG engine not available")
+    return rag.get_corpus_stats()
+
+
+@app.get("/advisory/corpus", tags=["Phase 3 — RAG"])
+def browse_corpus(
+    risk_level: Optional[str] = None,
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """Browse advisory corpus entries."""
+    try:
+        conn = _get_conn()
+        with conn, conn.cursor() as cur:
+            if risk_level:
+                cur.execute("""
+                    SELECT id, situation_type, risk_level, text, tags, source
+                    FROM advisory_corpus
+                    WHERE risk_level = %s
+                    ORDER BY created_at DESC LIMIT %s
+                """, (risk_level.upper(), limit))
+            else:
+                cur.execute("""
+                    SELECT id, situation_type, risk_level, text, tags, source
+                    FROM advisory_corpus
+                    ORDER BY created_at DESC LIMIT %s
+                """, (limit,))
+            rows = cur.fetchall()
+        conn.close()
+        return {
+            "entries": [
+                {"id": r["id"], "situation_type": r["situation_type"], "risk_level": r["risk_level"],
+                 "text": r["text"], "tags": r["tags"] or [], "source": r["source"]}
+                for r in rows
+            ],
+            "total": len(rows),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/advisory/corpus/rebuild", tags=["Phase 3 — RAG"])
+def rebuild_corpus(req: CorpusRebuildRequest, background_tasks: BackgroundTasks):
+    """Rebuild advisory corpus from event_clusters + seed entries (background)."""
+
+    def _run():
+        rag = app.state.rag_engine
+        if rag is None:
+            return
+        n = rag.rebuild_corpus()
+        rag.build_corpus_from_clusters(country=req.country, days=req.days, persist=True)
+        logger.info("Advisory corpus rebuilt: %d entries", n)
+
+    background_tasks.add_task(_run)
+    return {"status": "triggered", "days": req.days}
