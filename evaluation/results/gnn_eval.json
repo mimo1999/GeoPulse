@@ -1,0 +1,120 @@
+{
+  "model_path": "D:\\Projects\\Gldt_project\\models\\checkpoints\\gnn_best.pt",
+  "n_dates": 20,
+  "date_range": [
+    "2025-06-01",
+    "2026-03-22"
+  ],
+  "graph": {
+    "n_nodes": 317,
+    "n_edges": 93,
+    "density": 0.0019,
+    "isolated_nodes": 223,
+    "degree_mean": 0.59,
+    "degree_max": 7
+  },
+  "distributions": {
+    "contagion_score": {
+      "mean": 0.4997,
+      "std": 0.0167,
+      "min": 0.4635,
+      "p25": 0.4907,
+      "p50": 0.4988,
+      "p75": 0.51,
+      "max": 0.5497
+    },
+    "risk_amplification": {
+      "mean": 0.3162,
+      "std": 0.2202,
+      "min": -0.0525,
+      "p25": 0.1112,
+      "p50": 0.2857,
+      "p75": 0.5296,
+      "max": 0.7384
+    },
+    "top5_contagion": [
+      {
+        "country": "GZ",
+        "score": 0.5497
+      },
+      {
+        "country": "MDV",
+        "score": 0.5477
+      },
+      {
+        "country": "NG",
+        "score": 0.5445
+      },
+      {
+        "country": "PP",
+        "score": 0.5434
+      },
+      {
+        "country": "CG",
+        "score": 0.5364
+      }
+    ],
+    "top5_amplified": [
+      {
+        "country": "GZ",
+        "delta": 0.7384
+      },
+      {
+        "country": "MDV",
+        "delta": 0.7279
+      },
+      {
+        "country": "SY",
+        "delta": 0.7095
+      },
+      {
+        "country": "SU",
+        "delta": 0.7092
+      },
+      {
+        "country": "UY",
+        "delta": 0.7019
+      }
+    ],
+    "top5_dampened": [
+      {
+        "country": "ISR",
+        "delta": -0.0525
+      },
+      {
+        "country": "MH",
+        "delta": -0.0404
+      },
+      {
+        "country": "NS",
+        "delta": -0.04
+      },
+      {
+        "country": "MG",
+        "delta": -0.0234
+      },
+      {
+        "country": "NU",
+        "delta": -0.0221
+      }
+    ]
+  },
+  "ab_comparison": {
+    "h14": {
+      "n": 3198,
+      "base_mae": 0.1936,
+      "adjusted_mae": 0.2093,
+      "gnn_skill_score": -0.0812,
+      "corr_base": 0.3291,
+      "corr_adjusted": 0.3302
+    },
+    "h28": {
+      "n": 3026,
+      "base_mae": 0.1955,
+      "adjusted_mae": 0.2103,
+      "gnn_skill_score": -0.0756,
+      "corr_base": 0.3357,
+      "corr_adjusted": 0.3371
+    }
+  }
+}
