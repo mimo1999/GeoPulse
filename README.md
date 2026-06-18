@@ -2,6 +2,8 @@
 
 > **Geopolitical escalation monitoring and forecasting powered by GDELT**
 
+![World Risk Heatmap](docs/gifs/world_risk_heatmap.gif)
+
 Full-stack ML platform that ingests daily GDELT event exports, extracts per-country risk features, and runs a three-phase inference pipeline, all surfaced through a 7-page dark-themed intelligence dashboard.
 
 | What it does |
@@ -46,9 +48,13 @@ Mean AUC-ROC **0.983** · Composite skill **+36.2%** vs naive mean baseline · E
 
 The 28-day directional accuracy of **71.6%** is comparable to the ~75% reported for Random Forest models on GDELT binary instability forecasting (Zebrowski & Afli, SBP-BRiMS 2025; arXiv:2411.06639), while operating on the harder continuous regression target. The **+16.0% skill** over carry-forward clears the key bar from the ViEWS Prediction Challenge (arXiv:2407.11045), where a no-change model outperformed all submitted ML entries under the TADDA directional metric.
 
+![Country Risk Trajectories](docs/gifs/risk_timeline.gif)
+
 > ⚠️ Actuals are GDELT-derived risk scores, not independent ground truth. Real-world validation is shown by the UCDP performance below.
 
 **Confidence intervals:** Raw MC-Dropout variance collapses to near-zero at dropout=0.1. Post-hoc split-conformal calibration (Angelopoulos & Bates, 2023) raises empirical coverage from 13% to **78%** with a distribution-free guarantee. Each forecast step carries an `interval_source` field identifying which conditional quantile tier was applied (e.g. `conformal:28:HIGH`).
+
+![Escalation Forecast Ribbon](docs/gifs/forecast_ribbon.gif)
 
 ---
 
@@ -157,6 +163,8 @@ Key endpoints: `GET /global/heatmap`, `GET /country/{code}/timeline`, `POST /ris
 ---
 
 ## Dashboard
+
+![GNN Contagion Network](docs/gifs/gnn_network.gif)
 
 | Page | What it shows |
 |---|---|

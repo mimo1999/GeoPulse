@@ -17,6 +17,10 @@ build/
 # data/real_cache/  (seeded cache committed directly)
 data/UCDP/
 
+# GIF generation scripts (dev tooling, not part of the project)
+scripts/generate_readme_gifs.py
+scripts/generate_gnn_gif.py
+
 # Models
 models/checkpoints/
 *.pt
