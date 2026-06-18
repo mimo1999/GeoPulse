@@ -1,0 +1,55 @@
+{
+  "model_path": "D:\\Projects\\Gldt_project\\models\\real_data_model.pt",
+  "data_source": "polecat:dataverse_files.zip",
+  "label_source": "plover_native_counts",
+  "years": null,
+  "test_fraction": 0.2,
+  "n_samples": 5752,
+  "metrics": {
+    "instability": {
+      "n": 5752,
+      "auc_roc": 0.817,
+      "auc_pr": 0.7609,
+      "mae": 0.2727,
+      "mse": 0.1173,
+      "f1_0.5": 0.0
+    },
+    "war": {
+      "n": 5752,
+      "auc_roc": 0.8903,
+      "auc_pr": 0.8332,
+      "mae": 0.221,
+      "mse": 0.0849,
+      "f1_0.5": 0.1083
+    },
+    "terrorism": {
+      "n": 5752,
+      "auc_roc": 0.8747,
+      "auc_pr": 0.8349,
+      "mae": 0.385,
+      "mse": 0.23,
+      "f1_0.5": 0.0
+    },
+    "financial": {
+      "n": 5752,
+      "auc_roc": 0.8135,
+      "auc_pr": 0.747,
+      "mae": 0.3241,
+      "mse": 0.161,
+      "f1_0.5": 0.0
+    },
+    "composite_risk": {
+      "n": 5752,
+      "mae": 0.2525,
+      "mse": 0.1005,
+      "baseline_mae": 0.1986,
+      "skill_score": -0.2715
+    },
+    "mc_calibration": {
+      "ece": 0.7345,
+      "mean_confidence": 0.9996,
+      "coverage_0.10": 0.2651,
+      "coverage_0.20": 0.4877
+    }
+  }
+}
