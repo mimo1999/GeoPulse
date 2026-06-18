@@ -6,6 +6,55 @@ Full-stack ML platform that ingests daily GDELT event exports, extracts per-coun
 
 ---
 
+## Performance
+
+### HybridRiskTransformer (GDELT labels)
+
+3,403 held-out bi-weekly windows, last 20% per country, proxy labels derived from GDELT/CAMEO event ratios.
+
+| Task | AUC-ROC | AUC-PR | MAE | F1@0.5 |
+|------|---------|--------|-----|--------|
+| Instability | 0.981 | 0.982 | 0.061 | 0.852 |
+| War probability | 0.980 | 0.981 | 0.050 | 0.866 |
+| Terrorism risk | 0.976 | 0.977 | 0.095 | 0.848 |
+| Financial stress | **0.995** | **1.000** | 0.026 | 0.993 |
+
+Mean AUC-ROC **0.983** · Composite skill **+36.2%** vs naive mean baseline · ECE 0.017.
+
+> These scores are inflated by circularity: model features and labels share the same GDELT/CAMEO event space.
+
+---
+
+### EscalationForecaster walk-forward backtest (GDELT labels)
+
+53 bi-weekly expanding-window folds, 210 countries, 35,102 predictions.
+
+| Horizon | MAE | RMSE | Directional accuracy | Skill vs. carry-forward |
+|---------|-----|------|---------------------|------------------------|
+| **14 days** | 0.1620 | 0.1969 | 70.6% | +14.4% |
+| **28 days** | 0.1616 | 0.1967 | **71.6%** | **+16.0%** |
+| **42 days** | 0.1618 | 0.1972 | 70.7% | +15.4% |
+| **56 days** | 0.1616 | 0.1965 | 70.5% | +16.0% |
+
+**Confidence intervals:** Raw MC-Dropout variance collapses to near-zero at dropout=0.1. Split-conformal calibration raises empirical coverage from 13% to **78%**.
+
+---
+
+### External validation: POLECAT / PLOVER
+
+Evaluated on POLECAT (Cline Center) — 5,752 bi-weekly windows, 207 countries, 2018-2024.
+
+| Task | AUC-ROC | AUC-PR | MAE |
+|------|---------|--------|-----|
+| Instability | 0.817 | 0.761 | 0.273 |
+| War probability | **0.890** | **0.833** | 0.221 |
+| Terrorism risk | 0.875 | 0.835 | 0.385 |
+| Financial stress | 0.814 | 0.747 | 0.324 |
+
+Mean AUC-ROC **0.849**. Run: `python scripts/eval_polecat.py`
+
+---
+
 ## Architecture
 
 ```
@@ -50,13 +99,13 @@ Streamlit dashboard (7 pages)
 
 ## ML Models
 
-**HybridRiskTransformer:** 3-layer Transformer encoder over a 90-day feature window with 5 parallel risk heads (risk_score, instability, war, terrorism, financial). Checkpoint: `models/real_data_model.pt`.
+**HybridRiskTransformer:** 3-layer Transformer encoder over a 90-day feature window with 5 parallel risk heads.
 
-**EscalationForecaster:** seq2seq LSTM with 4 autoregressive bi-weekly steps. Uses MC-Dropout for variance estimation. Checkpoint: `models/checkpoints/forecaster_v1_best.pt`.
+**EscalationForecaster:** seq2seq LSTM with 4 autoregressive bi-weekly steps. MC-Dropout + split-conformal calibration for 80% CI.
 
-**RiskGNN:** 2-layer GAT over a hybrid adjacency matrix combining Pearson-correlation spillover edges with geographic contiguity priors (`data/structural_edges.csv`).
+**RiskGNN:** 2-layer GAT over a hybrid adjacency matrix combining Pearson-correlation spillover edges with geographic contiguity priors.
 
-**Integrated Gradients:** Signed feature attribution over the 14 input features for each prediction.
+**Integrated Gradients:** Signed feature attribution over the 14 input features.
 
 **RAG Advisory Engine:** TF-IDF retrieval over seed situation templates and event-cluster entries.
 
@@ -64,16 +113,9 @@ Streamlit dashboard (7 pages)
 
 ## API
 
-FastAPI on `http://localhost:8000` with 30+ endpoints. Swagger UI at `/docs`.
+FastAPI on `http://localhost:8000`. Swagger UI at `/docs`.
 
-Key endpoints:
-- `GET /global/heatmap` — all countries' latest risk scores
-- `GET /country/{code}/timeline` — historical risk timeline
-- `POST /riskscore` — MCP-compatible risk score
-- `GET /country/{code}/forecast` — 4-step escalation forecast
-- `GET /country/{code}/gnn_influence` — GNN contagion score
-- `GET /country/{code}/rag_advisory` — RAG advisory
-- `GET /country/{code}/attributions` — Integrated Gradients
+Key endpoints: `GET /global/heatmap`, `GET /country/{code}/timeline`, `POST /riskscore`, `GET /country/{code}/forecast`, `GET /country/{code}/gnn_influence`, `GET /country/{code}/rag_advisory`, `GET /country/{code}/attributions`.
 
 ---
 
@@ -99,18 +141,12 @@ Key endpoints:
 git clone <repo-url> && cd geopulse
 pip install -r requirements.txt
 cp .env.example .env
-```
-
-```bash
 python scripts/seed_db_from_cache.py
 python -m uvicorn backend.main:app --port 8000 --reload
 streamlit run streamlit_app/app.py --server.port 8502
 ```
 
-**Docker:**
-```bash
-cd docker && docker compose up -d
-```
+**Docker:** `cd docker && docker compose up -d`
 
 ---
 
@@ -120,8 +156,10 @@ cd docker && docker compose up -d
 python scripts/train_real_data.py
 python scripts/train_forecaster.py
 python scripts/run_backtest.py
+python scripts/calibrate_intervals.py
 python scripts/eval_risk_transformer.py
 python scripts/eval_gnn_spillover.py
+python scripts/eval_polecat.py
 ```
 
 Results are written to `evaluation/results/`.
