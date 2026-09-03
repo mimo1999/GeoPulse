@@ -24,7 +24,7 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
-from ui import BACKEND_URL, CONTAGION_SCALE, inject_theme, loading, metric_grid, risk_level
+from ui import BACKEND_URL, CONTAGION_SCALE, SELECTED_COUNTRY_KEY, fips_to_iso3, inject_theme, loading, metric_grid, risk_level
 
 # NOTE: no st.set_page_config() / inject_theme() call here. Under
 # st.navigation, whichever page runs must call st.set_page_config() itself
@@ -92,12 +92,21 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
         ),
         axis=1,
     )
+    # `country` is a FIPS 10-4 code (GDELT's native coding, e.g. "UP" for
+    # Ukraine) but Plotly's locationmode="ISO-3" needs ISO-3 (e.g. "UKR") —
+    # without this conversion the map renders with zero countries filled
+    # in, since none of the FIPS codes match any ISO-3 geometry.
+    df["iso3"] = df["country"].map(fips_to_iso3)
 
     fig = go.Figure(go.Choropleth(
-        locations=df["country"],
+        locations=df["iso3"],
         locationmode="ISO-3",
         z=df["risk_score"],
         text=df["text"],
+        # The FIPS code (not ISO-3), carried through click events so we can
+        # identify which country was clicked using the same code the rest
+        # of the app (session state, API calls) expects.
+        customdata=df["country"],
         hovertemplate="%{text}<extra></extra>",
         colorscale=[
             [0.0,  "#2a3f2a"],    # Low    — muted green
@@ -118,6 +127,25 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
             len=0.8,
         ),
         marker=dict(line=dict(color="#1a1a1a", width=0.5)),
+    ))
+
+    # Invisible click-target layer, centered on each country. The
+    # Choropleth trace itself does register clicks fine (Plotly's geo hit
+    # test needs a hover/mousemove to land first, same as any point-based
+    # trace — real mouse users always do this on the way to a click), but
+    # small countries can have only a few clickable pixels at typical
+    # zoom. This marker gives every country the same forgiving hit radius
+    # regardless of its on-screen size. Scattergeo accepts the same
+    # locations/locationmode as Choropleth, so no separate lat/lon lookup
+    # is needed to place it.
+    fig.add_trace(go.Scattergeo(
+        locations=df["iso3"],
+        locationmode="ISO-3",
+        mode="markers",
+        marker=dict(size=14, color="rgba(0,0,0,0.01)", line=dict(width=0)),
+        customdata=df["country"],
+        hoverinfo="skip",
+        showlegend=False,
     ))
 
     fig.update_layout(
@@ -258,7 +286,32 @@ def main():
     with loading("Loading global risk map..."):
         df_heatmap = fetch_heatmap()
     fig_map = build_choropleth(df_heatmap)
-    st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
+    map_event = st.plotly_chart(
+        fig_map, use_container_width=True, config={"displayModeBar": False},
+        on_select="rerun", selection_mode="points", key="home_choropleth",
+    )
+    st.caption("Click a country on the map to open its full breakdown in Country Drilldown.")
+
+    # Clicking a country jumps straight to its Country Drilldown page. The
+    # session_state write must happen here, before any widget on *this*
+    # page run binds SELECTED_COUNTRY_KEY (none currently do, but this
+    # mirrors the same ordering rule used on the GNN network graph), and
+    # st.switch_page immediately navigates away so the write always lands
+    # before Country Drilldown's own country_picker ever instantiates.
+    points = []
+    if map_event:
+        sel = map_event.get("selection") if hasattr(map_event, "get") else getattr(map_event, "selection", None)
+        if sel:
+            points = sel.get("points") if hasattr(sel, "get") else getattr(sel, "points", [])
+    if points:
+        pt = points[0]
+        cd = pt.get("customdata") if hasattr(pt, "get") else getattr(pt, "customdata", None)
+        clicked_code = cd[0] if isinstance(cd, (list, tuple)) and cd else cd
+        if not clicked_code:
+            clicked_code = pt.get("location") if hasattr(pt, "get") else getattr(pt, "location", None)
+        if clicked_code:
+            st.session_state[SELECTED_COUNTRY_KEY] = clicked_code
+            st.switch_page(pg_drilldown)
 
     # ---- Stats row ----
     if not df_heatmap.empty:

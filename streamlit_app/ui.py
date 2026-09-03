@@ -9,14 +9,44 @@ instead of each page redefining its own CSS and card markup.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Optional
 
 import requests
 import streamlit as st
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+
+@st.cache_data(ttl=None)
+def _load_fips_to_iso3() -> dict[str, str]:
+    """
+    FIPS 10-4 -> ISO-3166-1 alpha-3 lookup, for the choropleth map (which
+    needs ISO-3 codes for Plotly's `locationmode="ISO-3"`) — everything
+    else in the app, and the API itself, works in FIPS (GDELT's native
+    country coding, e.g. "UP" for Ukraine, "RS" for Russia).
+
+    Loaded by file path from the project's data/iso3_to_fips.py rather
+    than `import data.iso3_to_fips`, since `streamlit run` puts this
+    file's own directory (streamlit_app/) at sys.path[0], not the project
+    root, so the package import isn't reliably available here.
+    """
+    try:
+        path = Path(__file__).resolve().parent.parent / "data" / "iso3_to_fips.py"
+        spec = importlib.util.spec_from_file_location("iso3_to_fips", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return {fips: iso3 for iso3, fips in module.ISO3_TO_FIPS.items() if fips}
+    except Exception:
+        return {}
+
+
+def fips_to_iso3(code: str) -> str:
+    """Map a FIPS country code to ISO-3 for map rendering; falls back to the code itself if unmapped."""
+    return _load_fips_to_iso3().get(code, code)
 
 # Primary accent — a muted brick-red rather than a pure, saturated red.
 # Used for headers, chart lines, and card values across every page.
