@@ -4,7 +4,7 @@
 
 ![World Risk Heatmap](docs/gifs/world_risk_heatmap.gif)
 
-Full-stack ML platform that ingests daily GDELT event exports, extracts per-country risk features, and runs a three-phase inference pipeline, all surfaced through a 7-page dark-themed intelligence dashboard.
+Full-stack ML platform that ingests daily GDELT event exports, extracts per-country risk features, and runs a three-phase inference pipeline, all surfaced through a 2-page dark-themed intelligence dashboard.
 
 | What it does |
 |---|
@@ -114,7 +114,7 @@ country_daily_features -+-> risk_scorer (Ph.1)   -> country_risk_predictions
 FastAPI backend (30+ endpoints, MCP-compatible /riskscore)
       |
       v
-Streamlit dashboard (7 pages)
+Streamlit dashboard (2 pages)
 ```
 
 ---
@@ -166,15 +166,12 @@ Key endpoints: `GET /global/heatmap`, `GET /country/{code}/timeline`, `POST /ris
 
 ![GNN Contagion Network](docs/gifs/gnn_network.gif)
 
+Two pages: a global overview, and a single country drilldown that consolidates every per-country view as tabs (previously five separate pages — Event Explorer, Spillover Network, Escalation Forecast, GNN Network, RAG Advisory — now live here instead, since each took a country as its primary input and browsing between five country-scoped pages just to look at one country was the actual pain point).
+
 | Page | What it shows |
 |---|---|
-| Global Risk Map | Plotly choropleth world map + top-20 risk table + 90-day timeline |
-| Country Drilldown | Risk timeline, event clusters, Integrated Gradients attribution, spillover neighbours |
-| Event Explorer | GDELT cluster browser with category/time filters and Goldstein intensity chart |
-| Spillover Network | Global risk bar chart or ego-network view for any country |
-| Escalation Forecast | 4-step forecast ribbon + per-task breakdown + global escalation alerts table |
-| GNN Network | GAT contagion graph with node colour by risk/contagion and a country inspector panel |
-| RAG Advisory | RAG vs rule-based advisory side-by-side; similar risk profiles with source badges (template / cluster / historical) |
+| **Global Risk Map** | Plotly choropleth world map (click a country to jump straight into its drilldown) + top-20 risk table + collapsible global-only sections: escalation alerts across all countries, and the full GAT contagion network graph |
+| **Country Drilldown** | One country picker drives 6 tabs — Timeline, Forecast (4-step ribbon + per-task breakdown), Event Clusters (category filters + Goldstein intensity), Escalation Drivers (Integrated Gradients), Network (spillover + GNN contagion ego-graph with a click-to-inspect neighbor), RAG Advisory (retrieved historical analogues + rule-based comparison) — plus a collapsed "Model Internals" section for proxy-label inspection |
 
 ---
 
