@@ -1,6 +1,12 @@
 """
 POLECAT event data parser.
 
+DEPRECATED (2026-09-11): POLECAT stopped publishing after the Cline
+Center's funding ended -- the source data in data/POLECAT/ has no rows
+past June 2024. Kept in place (not removed) for the existing external
+validation eval and historical/cross-source work; not a viable live
+ingestion source until (if) POLECAT or a successor resumes publishing.
+
 Reads POLECAT tab-separated TXT files (ngecEvents.DV.YYYY.txt),
 maps ISO-3 country codes to FIPS 10-4, and aggregates per-(country, date)
 feature rows matching the country_daily_features schema.

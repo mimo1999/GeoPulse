@@ -2,6 +2,12 @@
 """
 Evaluate HybridRiskTransformer on POLECAT event data.
 
+Note: unlike ingestion/polecat_parser.py and ingestion/polecat_pipeline.py
+(deprecated 2026-09-11, no POLECAT data past June 2024), this script is
+NOT deprecated -- it's a one-off benchmark against the fixed historical
+dataset already in data/POLECAT/, not a live ingestion path, so it keeps
+working regardless of whether POLECAT ever publishes again.
+
 Produces the same metrics as eval_risk_transformer.py:
   AUC-ROC, AUC-PR, MAE, MSE, F1@0.5 per task (instability/war/terrorism/financial)
   + Composite risk skill score + MC-Dropout calibration

@@ -1,6 +1,19 @@
 """
 POLECAT ingestion pipeline.
 
+DEPRECATED (2026-09-11): POLECAT stopped publishing after the Cline Center's
+funding ended. The raw dataverse_files.zip in data/POLECAT/ tops out at
+June 2024 (ngecEvents.DV.2024.txt runs 2023-12 -> 2024-06; there is no
+newer data to ingest). This makes it infeasible as a live feature/ingestion
+source going forward -- it cannot be kept current the way GDELT can.
+
+Left in place, not removed: POLECAT is still useful for (a) the existing
+external-validation eval (scripts/eval_polecat.py) against its native
+PLOVER-taxonomy labels, and (b) as a one-off historical/cross-source
+comparison for the actor-graph work. If POLECAT (or a PLOVER-taxonomy
+successor) resumes publishing, this pipeline should still work unmodified
+against new yearly files -- re-evaluate then, don't rebuild from scratch.
+
 Reads POLECAT event data from data/POLECAT/dataverse_files.zip,
 aggregates daily per-country features, and upserts them into the
 country_daily_features table (same schema as feature_extractor.py).
