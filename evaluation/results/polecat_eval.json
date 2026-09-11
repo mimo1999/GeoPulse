@@ -46,9 +46,9 @@
       "skill_score": -0.2715
     },
     "mc_calibration": {
-      "ece": 0.7345,
+      "ece": 0.735,
       "mean_confidence": 0.9996,
-      "coverage_0.10": 0.2651,
+      "coverage_0.10": 0.2646,
       "coverage_0.20": 0.4877
     }
   }

@@ -1,6 +1,6 @@
 {
   "model_path": "D:\\Projects\\Gldt_project\\models\\real_data_model.pt",
-  "data_source": "parquet:D:\\Projects\\Gldt_project\\data\\real_cache",
+  "data_source": "parquet:D:\\Projects\\Geopulse\\data\\real_cache",
   "test_start": "2025-06-01",
   "test_end": "2026-03-22",
   "n_samples": 3403,
@@ -45,9 +45,9 @@
       "skill_score": 0.3619
     },
     "mc_calibration": {
-      "ece": 0.0167,
+      "ece": 0.0159,
       "mean_confidence": 0.9994,
-      "coverage_0.10": 0.9827,
+      "coverage_0.10": 0.9835,
       "coverage_0.20": 1.0
     }
   }

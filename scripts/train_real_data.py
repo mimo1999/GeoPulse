@@ -374,6 +374,30 @@ def build_country_timeseries(
 
 def compute_proxy_labels(feat_window: np.ndarray) -> np.ndarray:
     """
+    DEPRECATED -- DO NOT USE FOR NEW TRAINING RUNS.
+
+    This function is the source of the project's circularity problem. The
+    "labels" it returns are a *pure linear function of the input features*
+    (see the formulas below: instability = 0.4*protest + 0.3*violence +
+    0.2*diplo + 0.1*conflict, etc.). A model trained on this is predicting a
+    linear combination of its own inputs, which is why the reported AUC was
+    0.98 -- that number measures nothing about the real world.
+
+    Compounding it, scripts/train_real_data.py:549 uses random_split over
+    stride-1 overlapping windows, so adjacent train/test windows share 25 of
+    26 timesteps and carry near-identical labels.
+
+    Replacement: point-in-time labels derived from UCDP GED (independent,
+    human-coded ground truth) -- see preprocessing/pit_labels.py. Targets are
+    computed strictly from data *after* the run date; features strictly from
+    before it.
+
+    Kept (not deleted) so historical results remain traceable and so the
+    surrounding download/parse/aggregate/cache code in this file stays
+    runnable.
+
+    ---
+
     Derive 4-dim proxy label vector from a (seq_len, 7) feature window.
 
     Uses the tail of the window (last 5 steps or all if shorter) to

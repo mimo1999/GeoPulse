@@ -16,6 +16,23 @@ Full-stack ML platform that ingests daily GDELT event exports, extracts per-coun
 
 ## Performance
 
+> ⚠️ **These numbers are withdrawn pending re-run (2026-09-11).** Three defects were found
+> that invalidate them:
+>
+> 1. **The training labels are a linear function of the input features.**
+>    `scripts/train_real_data.py::compute_proxy_labels` computes
+>    `instability = 0.4*protest + 0.3*violence + 0.2*diplo + 0.1*conflict`. The model was
+>    predicting a linear combination of its own inputs — that is what the 0.98 AUC measures.
+> 2. **The backtest's "actual" was built from transposed columns.**
+>    `scripts/seed_db_from_cache.py` read `f5`/`f6` as goldstein/tone when the writer defines
+>    them as tone/goldstein. It is the sole writer of `country_daily_features.risk_score`,
+>    which `evaluation/backtester.py` scores against. Fixed; re-seed required.
+> 3. **The train/test split leaks.** `train_real_data.py:549` uses `random_split` over
+>    stride-1 overlapping windows — adjacent train and test windows share 25 of 26 timesteps.
+>
+> Rebuild in progress against UCDP GED ground truth with point-in-time generation. The
+> external POLECAT numbers below are unaffected by (1) but still inherit (3).
+
 Three evaluation tracks are maintained. The GDELT track measures self-consistency since labels come from the same source as features. The POLECAT and UCDP tracks are fully external.
 
 ### HybridRiskTransformer on GDELT (self-consistency)
@@ -29,7 +46,7 @@ Three evaluation tracks are maintained. The GDELT track measures self-consistenc
 | Terrorism risk | 0.976 | 0.977 | 0.095 | 0.848 |
 | Financial stress | **0.995** | **1.000** | 0.026 | 0.993 |
 
-Mean AUC-ROC **0.983** · Composite skill **+36.2%** vs naive mean baseline · ECE 0.017.
+Mean AUC-ROC **0.983** · Composite skill **+36.2%** vs naive mean baseline · ECE 0.016.
 
 > These scores are inflated by circularity: model features and labels share the same GDELT/CAMEO event space. Real-world discrimination is shown by the POLECAT and UCDP results below.
 
@@ -41,12 +58,12 @@ Mean AUC-ROC **0.983** · Composite skill **+36.2%** vs naive mean baseline · E
 
 | Horizon | MAE | RMSE | Directional accuracy | Skill vs. carry-forward |
 |---------|-----|------|---------------------|------------------------|
-| **14 days** | 0.1620 | 0.1969 | 70.6% | +14.4% |
-| **28 days** | 0.1616 | 0.1967 | **71.6%** | **+16.0%** |
-| **42 days** | 0.1618 | 0.1972 | 70.7% | +15.4% |
-| **56 days** | 0.1616 | 0.1965 | 70.5% | +16.0% |
+| **14 days** | 0.1622 | 0.1972 | 70.4% | +14.3% |
+| **28 days** | 0.1617 | 0.1968 | **71.8%** | **+16.0%** |
+| **42 days** | 0.1624 | 0.1977 | 70.6% | +15.1% |
+| **56 days** | 0.1618 | 0.1968 | 70.8% | +15.8% |
 
-The 28-day directional accuracy of **71.6%** is comparable to the ~75% reported for Random Forest models on GDELT binary instability forecasting (Zebrowski & Afli, SBP-BRiMS 2025; arXiv:2411.06639), while operating on the harder continuous regression target. The **+16.0% skill** over carry-forward clears the key bar from the ViEWS Prediction Challenge (arXiv:2407.11045), where a no-change model outperformed all submitted ML entries under the TADDA directional metric.
+The 28-day directional accuracy of **71.8%** is comparable to the ~75% reported for Random Forest models on GDELT binary instability forecasting (Zebrowski & Afli, SBP-BRiMS 2025; arXiv:2411.06639), while operating on the harder continuous regression target. The **+16.0% skill** over carry-forward clears the key bar from the ViEWS Prediction Challenge (arXiv:2407.11045), where a no-change model outperformed all submitted ML entries under the TADDA directional metric.
 
 ![Country Risk Trajectories](docs/gifs/risk_timeline.gif)
 
@@ -77,6 +94,15 @@ Run: `python scripts/eval_polecat.py`
 
 ### External validation: UCDP Organized Violence (battle-death ground truth)
 
+> ⚠️ **Not reproducible — withdrawn (2026-09-11).** Unlike the POLECAT track
+> (`scripts/eval_polecat.py`) and the GNN track (`scripts/eval_gnn_spillover.py`), **no
+> producing script for these numbers exists in the repository**. There is no `eval_ucdp.py`,
+> and no UCDP-reading code of any kind. The figures below cannot be regenerated or audited,
+> so they should not be relied on until reproduced by a committed script.
+>
+> A real UCDP evaluation is being built on UCDP GED Global v26.1 (417,968 events, 126
+> countries, 1989–2025), which is now in `data/UCDP/`.
+
 Predicted risk scores compared against UCDP Organized Violence Country-Year Dataset v26.1 (Sundberg & Melander 2013), entirely independent of GDELT. 85 matched countries, 2024.
 
 | Metric | Value |
@@ -87,8 +113,6 @@ Predicted risk scores compared against UCDP Organized Violence Country-Year Data
 | Spearman r vs total organized-violence deaths | **0.461** (p<0.001) |
 
 Countries with higher UCDP battle-death counts consistently receive higher predicted risk scores, confirming the model has learned real signal beyond GDELT self-consistency.
-
-Run: `python scripts/eval_against_ucdp.py`
 
 ---
 
@@ -101,7 +125,7 @@ GDELT (daily ZIP)
 ingestion/
 gdelt_downloader -> gdelt_parser -> event_cleaner -> db_writer
       |
-      v  PostgreSQL 18 / TimescaleDB
+      v  PostgreSQL 15 / TimescaleDB
 country_daily_features -+-> risk_scorer (Ph.1)   -> country_risk_predictions
                         +-> label_generator       -> country_multitask_labels
                         +-> event_clusterer       -> event_clusters
@@ -111,7 +135,7 @@ country_daily_features -+-> risk_scorer (Ph.1)   -> country_risk_predictions
                         +-> rag_engine            -> advisory_corpus
       |
       v
-FastAPI backend (30+ endpoints, MCP-compatible /riskscore)
+FastAPI backend (27 endpoints, MCP-compatible /riskscore)
       |
       v
 Streamlit dashboard (2 pages)
@@ -125,8 +149,8 @@ Streamlit dashboard (2 pages)
 |---|---|
 | Language | Python 3.10+ |
 | API | FastAPI 0.115 + Uvicorn |
-| Database | PostgreSQL 18 + TimescaleDB + pgvector + PostGIS |
-| ML | PyTorch 2.4: Transformer encoder, seq2seq LSTM, 2-layer GAT |
+| Database | PostgreSQL 15 + TimescaleDB + pgvector + PostGIS |
+| ML | PyTorch 2.4: Transformer encoder, Transformer encoder-decoder, 2-layer GAT |
 | Dashboard | Streamlit 1.40 + Plotly 5.24 |
 | Explainability | Integrated Gradients (custom) |
 | RAG | TF-IDF cosine retrieval + optional Ollama |
@@ -136,21 +160,21 @@ Streamlit dashboard (2 pages)
 
 ## ML Models
 
-**HybridRiskTransformer:** 3-layer Transformer encoder over a 90-day feature window with 5 parallel risk heads (risk_score, instability, war, terrorism, financial). Checkpoint: `models/real_data_model.pt`. The `/riskscore` API response includes a `data_confidence` field flagging GDELT media coverage density for the queried country (`high` / `medium` / `low` / `sparse`), so callers know when predictions may be underpowered by sparse English-language news coverage.
+**HybridRiskTransformer:** 2-layer Transformer encoder over a 90-day feature window with 4 parallel risk heads (instability, war, terrorism, financial); risk_score is a weighted composite (0.4·instability + 0.3·war + 0.2·terrorism + 0.1·financial). Checkpoint: `models/checkpoints/run_phase1_best.pt`. The `/riskscore` API response includes a `data_confidence` field flagging GDELT media coverage density for the queried country (`high` / `medium` / `low` / `sparse`), so callers know when predictions may be underpowered by sparse English-language news coverage.
 
-**EscalationForecaster:** 936k-param seq2seq LSTM with 4 autoregressive bi-weekly steps. Uses MC-Dropout for variance estimation and split-conformal calibration for the final 80% CI. Hits 71.6% directional accuracy at 28 days and +16% skill over persistence. Each step in the forecast response includes `interval_source` (e.g. `conformal:14:HIGH`, `conformal:global`) so consumers know which quantile tier produced the interval, since raw MC-Dropout variance alone is unreliable at dropout=0.1. Checkpoint: `models/checkpoints/forecaster_v1_best.pt`.
+**EscalationForecaster:** 936k-param Transformer encoder-decoder with 4 autoregressive bi-weekly steps. Uses MC-Dropout for variance estimation and split-conformal calibration for the final 80% CI. Hits 71.8% directional accuracy at 28 days and +16% skill over persistence. Each step in the forecast response includes `interval_source` (e.g. `conformal:14:HIGH`, `conformal:global`) so consumers know which quantile tier produced the interval, since raw MC-Dropout variance alone is unreliable at dropout=0.1. Checkpoint: `models/checkpoints/forecaster_v1_best.pt`.
 
 **RiskGNN:** 2-layer GAT over a hybrid adjacency matrix combining Pearson-correlation spillover edges from the DB with **geographic contiguity priors** (`data/structural_edges.csv`, 155 COW border pairs at weight 0.30). The structural priors ensure geographically adjacent countries stay connected in the graph regardless of whether their Transformer outputs happen to correlate, breaking a circular dependency where the GNN would otherwise operate entirely on its own upstream model's correlations. Network-adjusted risk = clip(base + amplification x 0.15).
 
-**Integrated Gradients:** Signed feature attribution over the 14 input features for each Phase 1 prediction.
+**Integrated Gradients:** Signed feature attribution over the 7 input features for each Phase 1 prediction.
 
-**RAG Advisory Engine:** TF-IDF retrieval over seed situation templates and event-cluster entries. The dashboard surfaces the top-5 similar risk profiles with a source badge distinguishing synthetic templates from real historical events. UCDP GED events from `data/UCDP/GEDEvent_v26_1_4_1101_2512.csv` can be imported as a real-event corpus via `scripts/import_ucdp_corpus.py`.
+**RAG Advisory Engine:** TF-IDF retrieval over seed situation templates and event-cluster entries. The dashboard surfaces the top-5 similar risk profiles with a source badge distinguishing synthetic templates from real historical events.
 
 ---
 
 ## API
 
-FastAPI on `http://localhost:8000` with 30+ endpoints. Swagger UI at `/docs`.
+FastAPI on `http://localhost:8000` with 27 endpoints. Swagger UI at `/docs`.
 
 Key endpoints: `GET /global/heatmap`, `GET /country/{code}/timeline`, `POST /riskscore` (MCP-compatible), `GET /country/{code}/forecast`, `GET /country/{code}/gnn_influence`, `GET /country/{code}/rag_advisory`, `GET /country/{code}/attributions`.
 
@@ -177,7 +201,7 @@ Two pages: a global overview, and a single country drilldown that consolidates e
 
 ## Quick Start
 
-**Prerequisites:** Python 3.10+, PostgreSQL 18 with `timescaledb`, `pgvector`, `postgis`, `pg_trgm`, `btree_gin`.
+**Prerequisites:** Python 3.10+, PostgreSQL 15 with `timescaledb`, `pgvector`, `postgis`, `pg_trgm`, `btree_gin`.
 
 ```bash
 git clone <repo-url> && cd geopulse
@@ -191,19 +215,19 @@ CREATE ROLE gldt WITH LOGIN PASSWORD 'gldt_secret';
 CREATE DATABASE gdelt_risk OWNER gldt;
 \c gdelt_risk
 \i docker/init.sql
-\i docker/migrations/001_add_coverage_tier.sql
+\i docker/init_v2.sql
 ```
 
 ```bash
 python scripts/seed_db_from_cache.py   # seed from parquet cache (no GDELT download needed)
 python -m uvicorn backend.main:app --port 8000 --reload
-streamlit run streamlit_app/app.py --server.port 8502
+streamlit run streamlit_app/app.py --server.port 8501
 ```
 
 **Docker (one command):**
 ```bash
 cd docker && cp ../.env.example ../.env && docker compose up -d
-# postgres:5432  backend:8000  streamlit:8502  ollama:11434 (optional)
+# postgres:5432  backend:8000  streamlit:8501  ollama:11434 (optional)
 ```
 
 ---
@@ -225,10 +249,9 @@ python scripts/eval_gnn_spillover.py
 
 # External evaluation (independent ground truth)
 python scripts/eval_polecat.py          # POLECAT/PLOVER native event taxonomy
-python scripts/eval_against_ucdp.py    # UCDP Organized Violence battle deaths
 ```
 
-Results are written to `evaluation/results/`. Configuration lives in `configs/settings.yaml` and can be overridden via environment variables in `.env`.
+Results are written to `evaluation/results/`. Configuration lives in `configs/config.yaml` and can be overridden via environment variables in `.env`.
 
 ---
 

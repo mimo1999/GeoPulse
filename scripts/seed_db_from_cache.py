@@ -37,13 +37,25 @@ logger = logging.getLogger("seed_db")
 # ---------------------------------------------------------------------------
 
 def compute_all(row: dict) -> tuple:
+    # Column order is defined by the writer, scripts/train_real_data.py:93-101
+    # (FEATURE_NAMES), and independently documented at
+    # models/forecaster_dataset.py:9-11:
+    #     f5 = tone_neg (avg_sentiment),  f6 = goldstein_norm
+    # This function previously read f5 as goldstein and f6 as tone -- transposed.
+    # Since this script is the sole writer of country_daily_features.risk_score,
+    # and evaluation/backtester.py:170 uses that column as its "actual", every
+    # backtest number produced before this fix was scored against a target built
+    # from swapped columns. Re-seed and re-run after changing this.
+    #
+    # Note also: percentile_normalize_day (train_real_data.py:256) inverts f6
+    # before ranking, so f6 is *inverted*-goldstein -- higher = more conflictual.
     protest  = float(row.get("f0", 0))
     violence = float(row.get("f1", 0))
     diplo    = float(row.get("f2", 0))
     economic = float(row.get("f3", 0))
     terror   = float(row.get("f4", 0))
-    goldstein = float(row.get("f5", 0))
-    tone     = float(row.get("f6", 0))
+    tone      = float(row.get("f5", 0))
+    goldstein = float(row.get("f6", 0))
 
     instability = min(0.5 * violence + 0.5 * protest, 1.0)
     war         = min(0.4 * violence + 0.4 * diplo + 0.2 * goldstein, 1.0)

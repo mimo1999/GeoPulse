@@ -136,13 +136,17 @@ def main():
         "--burn-in", type=int, default=30,
         help="Number of snapshot dates to skip before testing (default: 30)",
     )
+    parser.add_argument(
+        "--model-path", default=MODEL_PATH,
+        help="Path to forecaster checkpoint (default: models/checkpoints/forecaster_v1_best.pt)",
+    )
     args = parser.parse_args()
 
     from evaluation.backtester import WalkForwardBacktester
 
     backtester = WalkForwardBacktester(
         dsn=DSN,
-        model_path=MODEL_PATH,
+        model_path=args.model_path,
         burn_in=args.burn_in,
         countries=args.countries,
     )

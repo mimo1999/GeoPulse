@@ -1,5 +1,5 @@
 {
-  "model_path": "D:\\Projects\\Gldt_project\\models\\checkpoints\\gnn_best.pt",
+  "model_path": "D:\\Projects\\Geopulse\\models\\checkpoints\\gnn_best.pt",
   "n_dates": 20,
   "date_range": [
     "2025-06-01",
@@ -15,87 +15,87 @@
   },
   "distributions": {
     "contagion_score": {
-      "mean": 0.4997,
-      "std": 0.0167,
-      "min": 0.4635,
-      "p25": 0.4907,
-      "p50": 0.4988,
-      "p75": 0.51,
-      "max": 0.5497
+      "mean": 0.6275,
+      "std": 0.0364,
+      "min": 0.5209,
+      "p25": 0.6014,
+      "p50": 0.6313,
+      "p75": 0.6577,
+      "max": 0.6951
     },
     "risk_amplification": {
-      "mean": 0.3162,
-      "std": 0.2202,
-      "min": -0.0525,
-      "p25": 0.1112,
-      "p50": 0.2857,
-      "p75": 0.5296,
-      "max": 0.7384
+      "mean": 0.467,
+      "std": 0.1528,
+      "min": 0.0508,
+      "p25": 0.3698,
+      "p50": 0.4825,
+      "p75": 0.588,
+      "max": 0.7502
     },
     "top5_contagion": [
       {
-        "country": "GZ",
-        "score": 0.5497
+        "country": "BU",
+        "score": 0.6951
       },
       {
-        "country": "MDV",
-        "score": 0.5477
+        "country": "UY",
+        "score": 0.6944
       },
       {
-        "country": "NG",
-        "score": 0.5445
+        "country": "BY",
+        "score": 0.6916
       },
       {
-        "country": "PP",
-        "score": 0.5434
+        "country": "VM",
+        "score": 0.6894
       },
       {
-        "country": "CG",
-        "score": 0.5364
+        "country": "EC",
+        "score": 0.6894
       }
     ],
     "top5_amplified": [
       {
-        "country": "GZ",
-        "delta": 0.7384
+        "country": "THA",
+        "delta": 0.7502
       },
       {
-        "country": "MDV",
-        "delta": 0.7279
+        "country": "RM",
+        "delta": 0.7379
       },
       {
-        "country": "SY",
-        "delta": 0.7095
+        "country": "VCT",
+        "delta": 0.7358
       },
       {
-        "country": "SU",
-        "delta": 0.7092
+        "country": "UKR",
+        "delta": 0.7312
       },
       {
-        "country": "UY",
-        "delta": 0.7019
+        "country": "DNK",
+        "delta": 0.7293
       }
     ],
     "top5_dampened": [
       {
-        "country": "ISR",
-        "delta": -0.0525
+        "country": "MH",
+        "delta": 0.0508
       },
       {
-        "country": "MH",
-        "delta": -0.0404
+        "country": "AA",
+        "delta": 0.0741
+      },
+      {
+        "country": "AC",
+        "delta": 0.0885
       },
       {
         "country": "NS",
-        "delta": -0.04
+        "delta": 0.1079
       },
       {
-        "country": "MG",
-        "delta": -0.0234
-      },
-      {
-        "country": "NU",
-        "delta": -0.0221
+        "country": "NC",
+        "delta": 0.1105
       }
     ]
   },
@@ -103,18 +103,18 @@
     "h14": {
       "n": 3198,
       "base_mae": 0.1936,
-      "adjusted_mae": 0.2093,
-      "gnn_skill_score": -0.0812,
+      "adjusted_mae": 0.2076,
+      "gnn_skill_score": -0.0721,
       "corr_base": 0.3291,
-      "corr_adjusted": 0.3302
+      "corr_adjusted": 0.3305
     },
     "h28": {
       "n": 3026,
       "base_mae": 0.1955,
-      "adjusted_mae": 0.2103,
-      "gnn_skill_score": -0.0756,
+      "adjusted_mae": 0.2083,
+      "gnn_skill_score": -0.0655,
       "corr_base": 0.3357,
-      "corr_adjusted": 0.3371
+      "corr_adjusted": 0.3382
     }
   }
 }

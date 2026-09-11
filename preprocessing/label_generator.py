@@ -1,6 +1,29 @@
 """
 Phase 2: Proxy ground-truth label generator.
 
+DEPRECATED (2026-09-11) -- DO NOT USE FOR NEW TRAINING RUNS.
+
+These labels are derived from the *same six raw GDELT fields* the model
+receives as features (quad_class, event_root_code, event_base_code,
+avg_tone, num_mentions, actor country pair), over overlapping CAMEO code
+sets. Training on them measures how well the model reproduces a
+transformation of its own inputs, not whether it predicts anything real.
+See the circularity table in TODO.md.
+
+Additionally the label date equals the feature window's end date
+(models/multitask_dataset.py:136), so this is a same-day nowcast, not a
+forecast -- the label's own smoothing window sits inside the tail of the
+input window.
+
+Replacement: preprocessing/pit_labels.py, which derives point-in-time
+targets from UCDP GED -- independent, human-coded ground truth, computed
+strictly from data *after* the run date.
+
+Kept (not deleted) so previously reported results remain traceable, and
+because country_multitask_labels rows already in the DB were produced here.
+
+---
+
 Derives four continuous (0–1) proxy labels from raw GDELT events
 using CAMEO event codes, intensity thresholds, and rolling statistics.
 
