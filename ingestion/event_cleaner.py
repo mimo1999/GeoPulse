@@ -86,20 +86,23 @@ class EventCleaner:
             db.bulk_insert(clean_rows)
     """
 
-    # Countries to map from GDELT 2-letter codes → ISO 3166-1 alpha-2
-    # (GDELT uses FIPS-10 for some countries — normalize common ones)
-    FIPS_TO_ISO: dict[str, str] = {
-        "RS": "RU",   # Russia (GDELT uses RS)
-        "CH": "CN",   # China
-        "GM": "DE",   # Germany
-        "JA": "JP",   # Japan
-        "SP": "ES",   # Spain
-        "UK": "GB",   # United Kingdom
-        "UP": "UA",   # Ukraine
-        "PO": "PL",   # Poland
-        "FR": "FR",   # France (same)
-        "IT": "IT",   # Italy (same)
-    }
+    # DEPRECATED / DISABLED (2026-09-11) — DO NOT REPOPULATE.
+    #
+    # This used to rewrite 8 of GDELT's native FIPS 10-4 codes to ISO 3166-1
+    # alpha-2 (RS->RU, CH->CN, GM->DE, JA->JP, SP->ES, UK->GB, UP->UA, PO->PL)
+    # while leaving the other ~250 countries in FIPS. Every other consumer in
+    # this repo -- data/iso3_to_fips.py, the parquet cache written by
+    # train_real_data.py, streamlit_app/ui.py's fips_to_iso3 -- assumes
+    # gdelt_events.action_geo_country is FIPS-only. The partial override
+    # created a mixed key space: Russia's events split silently across "RS"
+    # and "RU" rows, invisible to any single-code lookup or join (e.g. the
+    # UCDP GW->ISO3->FIPS2 join in data/gw_country_map.py, which found zero
+    # gdelt_events rows for Russia/Ukraine/China/Germany/Spain until this was
+    # found). Historical gdelt_events rows were corrected with a one-time
+    # UPDATE (scripts/fix_country_code_split.py); country_daily_features
+    # retains the fragmentation on rows written before this fix -- it is
+    # superseded by the PIT panel (TODO.md P0) rather than repaired in place.
+    FIPS_TO_ISO: dict[str, str] = {}
 
     def __init__(
         self,

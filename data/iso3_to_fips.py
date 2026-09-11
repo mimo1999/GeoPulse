@@ -42,7 +42,9 @@ ISO3_TO_FIPS: dict[str, str | None] = {
     "BRN": "BX",   # Brunei
     "BTN": "BT",   # Bhutan
     "BWA": "BC",   # Botswana
-    "CAF": "CF",   # Central African Republic
+    # Corrected 2026-09-11: CF is Congo (Brazzaville); CAR is CT. Verified
+    # against GDELT geography — CT spans lat 2.9–10.5 / lon 14.8–27.2.
+    "CAF": "CT",   # Central African Republic
     "CAN": "CA",   # Canada
     "CCK": "CK",   # Cocos (Keeling) Islands
     "CHE": "SZ",   # Switzerland
@@ -50,8 +52,13 @@ ISO3_TO_FIPS: dict[str, str | None] = {
     "CHN": "CH",   # China
     "CIV": "IV",   # Côte d'Ivoire
     "CMR": "CM",   # Cameroon
-    "COD": None,   # Congo (DRC) — no current FIPS 10-4 (formerly ZR/Zaire)
-    "COG": "CG",   # Congo (Republic)
+    # Corrected 2026-09-11. COD was marked unmapped and COG was given CG, which
+    # is DR Congo's code, not the Republic's. Verified empirically against the
+    # GDELT event geography in this DB: CF spans lon 11.7–20.0 / lat −6.1–1.8
+    # (Republic of Congo), CG spans lon 12.4–30.6 / lat −11.8–4.3 (DR Congo).
+    # The pair is the reverse of the ISO3 intuition and is a standing trap.
+    "COD": "CG",   # Congo (DRC) — Kinshasa
+    "COG": "CF",   # Congo (Republic) — Brazzaville
     "COK": "CW",   # Cook Islands
     "COL": "CO",   # Colombia
     "COM": "CN",   # Comoros
@@ -195,7 +202,10 @@ ISO3_TO_FIPS: dict[str, str | None] = {
     "RUS": "RS",   # Russia
     "RWA": "RW",   # Rwanda
     "SAU": "SA",   # Saudi Arabia
-    "SCG": "RI",   # Serbia and Montenegro (legacy → Serbia)
+    # Dissolved 2006. Mapping it to RI collided with SRB and forced a
+    # `DISTINCT ON (fips) ... ORDER BY iso3 != 'SRB'` workaround downstream.
+    # No live data uses SCG; None removes the ambiguity at the source.
+    "SCG": None,   # Serbia and Montenegro (dissolved; successor is SRB → RI)
     "SDN": "SU",   # Sudan
     "SEN": "SG",   # Senegal
     "SGP": "SN",   # Singapore
@@ -207,7 +217,10 @@ ISO3_TO_FIPS: dict[str, str | None] = {
     "SMR": "SM",   # San Marino
     "SOM": "SO",   # Somalia
     "SRB": "RI",   # Serbia
-    "SSD": None,   # South Sudan (independent 2011, no FIPS 10-4 assigned)
+    # Corrected 2026-09-11: FIPS 10-4 did assign OD after independence, and
+    # GDELT uses it — 5,438 events in this DB at lat 3.6–12.0 / lon 24.4–35.0,
+    # distinct from Sudan's SU at lat 9.6–23.0.
+    "SSD": "OD",   # South Sudan
     "STP": "TP",   # São Tomé and Príncipe
     "SUR": "NS",   # Suriname
     "SVK": "LO",   # Slovakia
