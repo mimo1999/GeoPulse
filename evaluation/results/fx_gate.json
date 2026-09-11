@@ -1,0 +1,53 @@
+{
+  "verdict": "FAIL",
+  "decision_rule": {
+    "dir_acc_threshold": 0.53,
+    "oos_r2_threshold": 0.0,
+    "fdr_q": 0.05,
+    "pre_registered": true
+  },
+  "criteria_met": {
+    "dir_acc": false,
+    "oos_r2": false,
+    "fdr": false
+  },
+  "walk_forward": {
+    "n": 238,
+    "dir_acc": 0.44537815126050423,
+    "oos_r2_vs_rw": -0.2886225058029126,
+    "rmse_model": 0.02497624359675813,
+    "rmse_randomwalk": 0.022002106648353524
+  },
+  "correlation_grid": {
+    "n_tests": 490,
+    "n_p_lt_05_uncorrected": 17,
+    "n_expected_by_chance": 24.5,
+    "n_survive_bh_fdr": 0,
+    "survivors": []
+  },
+  "panel": {
+    "n_country_months": 420,
+    "n_countries": 14,
+    "countries": [
+      "BR",
+      "HU",
+      "ID",
+      "IN",
+      "IS",
+      "KS",
+      "MX",
+      "MY",
+      "PL",
+      "RO",
+      "RP",
+      "SF",
+      "TH",
+      "TU"
+    ],
+    "n_features": 35,
+    "month_min": "2023-08-01",
+    "month_max": "2026-01-01"
+  },
+  "fx_source": "ECB reference rates via api.frankfurter.app",
+  "pit_buffer_days": 7
+}
