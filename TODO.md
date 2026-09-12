@@ -334,11 +334,57 @@ Fixed: raises `GDELTDownloadError` now, which `ingest_date`'s existing
 
 Step 5 (Phase B ingest) is now done: parser extended, schema migrated, N+1
 fixed, 2023-2025 raw events backfilled (98.9% date coverage, gap documented
-and understood). **Step 6 next**: B1-B7 feature engineering (fine-grained
-CAMEO shares, actor-structural features, geographic dispersion, tone
-distribution) on top of this raw data, then re-run `evaluation/pit_backtest.py`
-to see whether richer GDELT features do what the compressed 7-column parquet
-features (Step 4) didn't.
+and understood).
+
+**2026-09-12 — Step 6 (Phase B features): closer, still short of the
+UCDP-only bar.** `preprocessing/pit_features_b.py` built B1 (22 named
+fine-grained CAMEO codes — riot/arrest/repression/assault/fight/mass-violence
+subtypes — as mention-weighted share, log-count, and log-count delta each),
+B2 (actor-sector shares for GOV/MIL/REB/INS/OPP/COP/CVL, REB↔GOV dyad share,
+cross-border share), B4 (media amplification), B5 partial (adm1 count +
+Shannon entropy — capital-distance and border-proximity skipped, no
+reference data for either), and B7 (tone distribution) — 93 feature columns,
+built directly from the Step 5 raw-event backfill rather than the parquet
+cache Phase A used. B3 (graph scalars) not attempted — the existing `graph`
+Postgres schema covers a single month (June 2026) as a separate KG
+prototype, not this backfill's 2023-2025 window.
+
+| model | active-only accuracy | active-only macro-F1 |
+|---|---|---|
+| `lagged_ucdp_only` (A3 only, no GDELT) | 71.7% | **0.592** |
+| `phase_a_gdelt` (A3 + A1 parquet) | 70.5% | 0.547 |
+| `phase_b_gdelt` (A3 + B1/B2/B4/B5/B7) | 70.3% | **0.551** |
+
+Phase B modestly beats Phase A (0.551 vs 0.547) but still does not clear the
+UCDP-lag-only bar. Permutation importance on the last fold shows a
+qualitatively cleaner signal than Phase A had: **11 of the top 15 features
+are B-family** (vs 9/15 for Phase A), with several fine-grained CAMEO codes
+showing real, distinct contribution — `b1_175_share` (repression),
+`b1_190_log_count` (fight), `b1_201_share`, `b2_actor1_cop_share`. The B
+family is clearly picking up *something* GDELT-specific that the compressed
+parquet couldn't, which is progress — it just isn't enough to overcome
+feature-volume dilution against A3's 9 clean columns (93 B features is
+close to Phase A's 56, same class of problem). No hyperparameter tuning or
+feature pruning attempted to reverse this, same discipline as Step 4.
+
+**Where this leaves the project honestly**: `lagged_ucdp_only` remains the
+best model on record after two independent, differently-sourced GDELT
+feature attempts. This is itself a real, reportable finding — not a
+failure to find the right features, necessarily, but consistent with what
+the literature already expects (conflict is dominated by its own recent
+history; news-event aggregates add only a small, hard-to-extract margin on
+top). Two ways to still test this fairly, neither attempted yet: (a) a
+pre-registered feature-selection pass — pick the ~15 highest-permutation-
+importance B/A1 features *before* looking at the aggregate score, refit,
+and see if a leaner GDELT feature set clears the bar without the dilution
+cost (same falsification discipline as the FX gate: decide the rule before
+running it); (b) B3 graph scalars, rebuilt over 2023-2025 instead of the
+June-2026 prototype window — the plan's own evidence (8,244 vs 93
+edges/month over the existing spillover table) suggests this family has
+real, unexploited structure the tabular B-features above don't capture.
+
+4/4 new tests pass (PIT boundary matches a direct raw-event count exactly,
+log-count matches by hand); full suite 152/152.
 
 **Knowledge-graph prototype (separate from P0, see earlier discussion):**
 built a relational-as-graph schema (`graph` Postgres schema, Apache AGE
