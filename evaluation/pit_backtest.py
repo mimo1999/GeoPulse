@@ -40,6 +40,10 @@ Baselines, in the order the plan lists them:
                               (no GDELT). "The baseline that matters" -- the whole
                               project's claim is that GDELT adds over this.
 
+Two GDELT-based models, both A3 + a GDELT feature family, same predict_gdelt_model:
+    phase_a_gdelt -- A3 + A1 (parquet temporal derivatives, preprocessing/pit_features.py)
+    phase_b_gdelt -- A3 + B1/B2/B4/B5/B7 (raw-event features, preprocessing/pit_features_b.py)
+
 Usage:
     python -m evaluation.pit_backtest
 """
@@ -221,15 +225,15 @@ BASELINES: dict[str, Callable] = {
 }
 
 
-def predict_phase_a_gdelt(train: pd.DataFrame, test: pd.DataFrame, a1_features: list[str]) -> np.ndarray:
-    """Phase A model: A3 (UCDP lag history) + A1 (GDELT parquet temporal
-    derivatives) combined. This is the first predictor in the whole plan
-    that actually uses GDELT -- everything before it (baselines 1-4) is
-    either trivial or UCDP-only by design, specifically so this one has a
-    real, non-circular bar to clear. HistGradientBoostingClassifier handles
-    the NaNs in both feature families natively (A3: no history yet for a
-    country's first few months; A1: before parquet coverage starts in 2023)."""
-    feature_cols = A3_FEATURES + a1_features
+def predict_gdelt_model(train: pd.DataFrame, test: pd.DataFrame, gdelt_features: list[str]) -> np.ndarray:
+    """A3 (UCDP lag history) + a GDELT feature family combined, via
+    HistGradientBoostingClassifier (handles NaNs in both families natively --
+    A3: no history yet for a country's first few months; GDELT: before the
+    feature source's own coverage starts). Shared by Phase A (A1, parquet
+    temporal derivatives) and Phase B (B1/B2/B4/B5/B7, raw-event features) --
+    same model, same harness, only the feature family changes, so the A-vs-B
+    comparison is apples to apples."""
+    feature_cols = A3_FEATURES + gdelt_features
     train_f = train.dropna(subset=["log_deaths_prev1"])  # require at least A3 history
     if train_f["escalation_dir"].nunique() < 2 or len(train_f) < 30:
         return predict_persistence_flat(train, test)
@@ -341,7 +345,7 @@ def run_backtest(
     }
 
 
-def main(include_phase_a: bool = True) -> int:
+def main(include_phase_a: bool = True, include_phase_b: bool = True) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     logger.info("Loading country panel ...")
@@ -355,6 +359,21 @@ def main(include_phase_a: bool = True) -> int:
         logger.info("Building Phase A (GDELT parquet) features ...")
         df = build_phase_a_panel(df)
         a1_features = A1_FEATURES
+
+    b_features: list[str] = []
+    if include_phase_b:
+        from preprocessing.pit_features_b import attach_phase_b_to_labels, b_feature_columns
+        b_panel_path = "data/pit_phase_b_panel.parquet"
+        if os.path.exists(b_panel_path):
+            logger.info("Loading cached Phase B panel from %s ...", b_panel_path)
+            b_panel = pd.read_parquet(b_panel_path)
+        else:
+            from preprocessing.pit_features_b import build_phase_b_panel
+            logger.info("Building Phase B (raw GDELT) features -- this queries "
+                        "the full backfill and takes several minutes ...")
+            b_panel = build_phase_b_panel(EVAL_START, EVAL_END)
+        b_features = b_feature_columns(b_panel)
+        df = attach_phase_b_to_labels(df, b_panel)
 
     # "Active" is scoped to the eval window itself (any event in 2023-2025),
     # matching the plan's ~77-country figure -- NOT lifetime-since-2015
@@ -371,7 +390,9 @@ def main(include_phase_a: bool = True) -> int:
 
     predictors = dict(BASELINES)
     if include_phase_a:
-        predictors["phase_a_gdelt"] = lambda train, test: predict_phase_a_gdelt(train, test, a1_features)
+        predictors["phase_a_gdelt"] = lambda train, test: predict_gdelt_model(train, test, a1_features)
+    if include_phase_b:
+        predictors["phase_b_gdelt"] = lambda train, test: predict_gdelt_model(train, test, b_features)
 
     for name, fn in predictors.items():
         logger.info("Running: %s", name)
