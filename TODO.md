@@ -307,15 +307,38 @@ correctness, CAMEO-3 resolution); full suite 146/146.
   integration tests pass.
 - **Backfill running**: `python scripts/backfill.py --start 2023-01-01 --end
   2025-12-31` (1,096 days), started 2026-09-12 15:25, log at
-  `logs/phase_b_backfill.log`. Estimated ~13.75s/day average from prior runs
-  → **~4.2 hours**. First attempt was accidentally killed at 7/1096 by a
-  shell-backgrounding mistake (`&` combined with the harness's own
-  background-task tracking — the wrapper shell exited immediately and orphaned
-  the real process); restarted cleanly, already-ingested dates skip fast so
-  the redo cost was negligible.
-- Not yet done: B1-B7 feature engineering itself (fine-grained CAMEO shares,
-  actor-structural, geographic dispersion, tone distribution) — that's
-  Step 6, waiting on this backfill to finish.
+  `logs/phase_b_backfill.log`. First attempt was accidentally killed at
+  7/1096 by a shell-backgrounding mistake (`&` combined with the harness's
+  own background-task tracking — the wrapper shell exited immediately and
+  orphaned the real process); restarted cleanly, already-ingested dates skip
+  fast so the redo cost was negligible.
+
+**2026-09-12 — Backfill complete: 1,084/1,096 dates, 47.8M raw events,
+2023-01-01→2025-12-31.** 12 dates (2025-06-14 through 2025-07-01) are a
+**genuine gap on GDELT's own server** — confirmed via direct HTTP check:
+these return an empty placeholder response (MD5-of-empty-string ETag,
+`Last-Modified: 2014`) where adjacent dates return a normal 9MB+ zip. Not a
+bug in this codebase's URL construction or a transient network issue; not
+retried further.
+
+**Found and fixed a real bug while chasing the gap**: the backfill's own
+summary line ("1096/1096 dates OK") was wrong — `stream_csv_rows()` returned
+an *empty generator* on a failed download instead of raising, so
+`ingest_date` saw zero chunks, ran to completion normally, and logged
+`status="success"` with 0 events. Indistinguishable from a genuinely quiet
+day; the gap was only caught by a direct `COUNT(DISTINCT event_date)`
+against the requested range, not by anything the pipeline itself reported.
+Fixed: raises `GDELTDownloadError` now, which `ingest_date`'s existing
+(and already-correct) exception handling picks up like any other failure.
+2 new tests; full suite 152/152.
+
+Step 5 (Phase B ingest) is now done: parser extended, schema migrated, N+1
+fixed, 2023-2025 raw events backfilled (98.9% date coverage, gap documented
+and understood). **Step 6 next**: B1-B7 feature engineering (fine-grained
+CAMEO shares, actor-structural features, geographic dispersion, tone
+distribution) on top of this raw data, then re-run `evaluation/pit_backtest.py`
+to see whether richer GDELT features do what the compressed 7-column parquet
+features (Step 4) didn't.
 
 **Knowledge-graph prototype (separate from P0, see earlier discussion):**
 built a relational-as-graph schema (`graph` Postgres schema, Apache AGE
