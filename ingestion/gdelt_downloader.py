@@ -22,6 +22,15 @@ import requests
 logger = logging.getLogger("ingestion.downloader")
 
 
+class GDELTDownloadError(RuntimeError):
+    """Raised when a GDELT file can't be fetched after retries. Must NOT be
+    swallowed into an empty result -- a failed download is indistinguishable
+    from a genuinely quiet day if the caller can't tell them apart, which is
+    exactly the failure mode this class exists to prevent (found 2026-09-12:
+    12 dates in a 2023-2025 backfill silently logged as status="success"
+    with 0 events, rather than the "failed" they actually were)."""
+
+
 # ---------------------------------------------------------------------------
 # GDELT 1.0 column names (all 58 columns)
 # ---------------------------------------------------------------------------
@@ -151,8 +160,12 @@ class GDELTDownloader:
 
         raw_bytes = self._download_with_retry(url)
         if raw_bytes is None:
-            logger.error("Failed to download %s after retries", url)
-            return
+            # NOT a bare `return` -- a generator that just stops looks
+            # identical to "zero events that day" to every caller. Raising
+            # lets ingestion_pipeline.ingest_date's existing exception
+            # handling do what it already does correctly for every other
+            # failure: mark the run failed, not silently successful.
+            raise GDELTDownloadError(f"Failed to download {url} after retries")
 
         yield from self._parse_zip_stream(raw_bytes, chunk_size_rows)
 
