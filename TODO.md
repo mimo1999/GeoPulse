@@ -237,6 +237,56 @@ further-restricted subset. Not chased to an exact match; documented instead.
 6/6 new tests pass (fold-purge boundary, PIT-lag correctness of the A3
 feature builder, baseline sanity checks); full suite 139/139.
 
+**2026-09-12 — Step 4 (Phase A model): GDELT does not beat the UCDP-lag
+baseline. Reporting as found, not tuned.** `preprocessing/pit_features.py`
+builds A1 temporal derivatives from `data/real_cache/*.parquet` (56 columns:
+current/Δ1/Δ2/rolling-mean-3-6-13/rolling-std-13/z-score-13 per raw feature)
+and joins them onto the label panel via an as-of merge respecting the same
+7-day PIT buffer used in `pit_labels.py`. Country-code normalization
+(join hazard #2 from the plan): CAMEO-3 codes are GDELT's own alphabet for
+`actor1_country_code`, same as ISO 3166-1 alpha-3 — resolved via
+`data/iso3_to_fips.py` (fixed earlier this session), 68/71 distinct 3-char
+codes resolve; the 3 that don't (AFR, EUR, SEA) are regional/supranational
+CAMEO actors, correctly dropped, not countries. 97% A1 coverage within the
+2023-2025 eval window (parquet starts exactly at 2023-01-01, so the first
+few 2023 folds have thin rolling history — expected, not a bug).
+
+Result, same harness, same 35 folds, A3 (UCDP lag) + A1 (GDELT) combined vs.
+A3 alone:
+
+| model | active-only accuracy | active-only macro-F1 |
+|---|---|---|
+| `lagged_ucdp_only` (A3 only, no GDELT) | 71.7% | **0.592** |
+| `phase_a_gdelt` (A3 + A1 GDELT) | 70.5% | **0.547** |
+
+**GDELT made it worse, not better.** Permutation importance on the model
+(last fold) shows GDELT features are not dead weight — 9 of the top 15
+features by importance are A1 columns with real positive contribution — but
+the net effect across all 35 folds is still negative. Most likely
+explanation: feature-volume dilution (65 total features, 56 of them A1, vs
+9 for the UCDP-only baseline) on a modest per-fold training size, compounded
+by the A1 feature quality issues the plan already flagged before this test
+ran (`f2`/`f6` collinear with `avg_goldstein`, `f6` percentile-inverted
+despite its name, within-day cross-sectional ranking meaning a country's
+values move when *other* countries move, not just itself).
+
+**Did not chase a better number.** No hyperparameter tuning, no feature
+pruning, no reruns with different configs to try to flip this result —
+that would be exactly the kind of post-hoc rationalization the FX gate's
+pre-registration existed to prevent, just applied to model configs instead
+of asset classes. `lagged_ucdp_only` stays the best model on record until
+something beats it under the same harness.
+
+**What this does and doesn't mean.** It does not mean "GDELT can't help" —
+it means *this specific, already-flagged-as-lossy feature source* (7 raw
+parquet columns, collapsed by percentile-ranking, missing 35 of GDELT's 58
+raw columns per the plan's Phase B section) doesn't clear the bar. Phase B
+(fine-grained CAMEO codes, actor-structural features, media/geographic
+dispersion — the plan's B1-B7) is the next real test, per the plan's own
+sequencing ("Phase B features → re-run the same harness, report the A→B
+delta"). 7/7 new tests pass (no-future-leakage on the A1 builder, PIT-buffer
+correctness, CAMEO-3 resolution); full suite 146/146.
+
 **Knowledge-graph prototype (separate from P0, see earlier discussion):**
 built a relational-as-graph schema (`graph` Postgres schema, Apache AGE
 confirmed not viable — not installable on this Postgres 18/Windows setup)
