@@ -182,6 +182,52 @@ geography (bounding boxes) in this DB:**
   `SRB`'s `RI` — set to `None`, removing the ambiguity that previously forced
   a `DISTINCT ON ... ORDER BY iso3 != 'SRB'` workaround downstream.
 
+**2026-09-12 — Econ-target search closed for good.** User proposed two more
+financial-target framings after the FX gate failed (bucketed GDP growth;
+national equity indices as a proxy). Both rejected without running new gates:
+- GDP growth buckets: monthly GDP is essentially a UK-only phenomenon: IMF's
+  own capacity assessment states CPI/national-accounts/GDP data are the
+  *weakest* categories specifically in Fragile and Conflict-Affected States
+  (70%+ of countries with serious statistical shortcomings are FCS) — same
+  coverage failure as FX, relocated from "no liquid market" to "no
+  statistics."
+- National equity indices (NIFTY50/Sensex, S&P 500/Nasdaq): efficient-markets
+  objection is *stronger* here than for FX (more liquid, more analyst
+  coverage); the country overlap with viable indices is nearly the same
+  ~18-country set FX already failed on; and index returns are dominated by
+  global market beta, not domestic conflict — a real risk of a *spurious*
+  positive (global bad-news volume moving both GDELT counts and markets
+  together) rather than a clean null. The plan's own Step-1 text pre-committed
+  to this: "If FX shows nothing, equities/credit/property will not" — written
+  before the FX gate ran, specifically to prevent testing asset classes one
+  at a time until something clears significance by chance. Not reopened.
+  Economic indicators remain in scope only as PIT *features* (plan A5).
+
+**2026-09-12 — Step 3 (evaluation harness + baselines) done.**
+`evaluation/pit_backtest.py`: purged expanding-window walk-forward (3-month
+purge), monthly grid, evaluated over the plan's locked 2023-2025 window (35
+folds) using the full 2015-2025 history as training data. Reports pooled,
+active-only (77 countries — matches the plan's measured figure exactly), and
+macro-by-country. Four baselines implemented:
+- `global_base_rate` and `persistence_flat` (always "flat") are numerically
+  identical — confirms "flat" is genuinely the training-window mode, exactly
+  what the plan's chosen persistence baseline assumes.
+- `country_base_rate`: lower accuracy (64.2%) but much higher macro-F1 (0.378)
+  than the global baselines — trades majority-class accuracy for minority
+  (up/down) recall on chronically-escalating/de-escalating countries.
+- `lagged_ucdp_only` (HistGradientBoostingClassifier — no `lightgbm` package
+  installed, sklearn's native equivalent used instead; A3 features computed
+  purely from `ucdp.country_pit_labels`' own stored history, zero GDELT):
+  **macro-F1 0.592 vs 0.264-0.378 for the trivial baselines.** This is the
+  number any GDELT-based Phase A/B model has to beat — "the baseline that
+  matters," per the plan.
+Active-country persistence accuracy (65.7%) is higher than the plan's
+quoted 54% — expected: my population is every month of every 2023-2025-active
+country (including their quiet months), the plan's n=974 figure was a
+further-restricted subset. Not chased to an exact match; documented instead.
+6/6 new tests pass (fold-purge boundary, PIT-lag correctness of the A3
+feature builder, baseline sanity checks); full suite 139/139.
+
 **Knowledge-graph prototype (separate from P0, see earlier discussion):**
 built a relational-as-graph schema (`graph` Postgres schema, Apache AGE
 confirmed not viable — not installable on this Postgres 18/Windows setup)
