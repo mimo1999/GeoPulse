@@ -103,3 +103,37 @@ def test_parse_large_chunk(parser):
     events, skipped = parser.parse_chunk(rows)
     assert len(events) == 1000
     assert skipped == 0
+
+
+def test_phase_b_fields_parsed(parser):
+    """Plan Step 5: action_geo_adm1_code, known_group_code, type2/3, and
+    is_root_event were previously dropped -- now they must round-trip."""
+    row = _make_row(
+        action_geo_adm1_code="US36",
+        actor1_known_group_code="UN",
+        actor2_known_group_code="",
+        actor1_type2_code="",
+        actor1_type3_code="",
+        actor2_type2_code="",
+        actor2_type3_code="",
+        is_root_event="1",
+    )
+    events, _ = parser.parse_chunk([row])
+    event = events[0]
+    assert event.action_geo_adm1 == "US36"
+    assert event.actor1_known_group_code == "UN"
+    assert event.actor2_known_group_code is None  # empty string -> None
+    assert event.is_root_event is True
+
+    d = parser.to_db_dict(event)
+    assert d["action_geo_adm1"] == "US36"
+    assert d["is_root_event"] is True
+
+
+def test_is_root_event_false_and_missing():
+    parser = GDELTParser()
+    row_false = _make_row(is_root_event="0")
+    row_missing = _make_row()  # no is_root_event key at all
+    events, _ = parser.parse_chunk([row_false, row_missing])
+    assert events[0].is_root_event is False
+    assert events[1].is_root_event is None

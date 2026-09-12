@@ -44,6 +44,17 @@ class GDELTEvent:
     latitude: Optional[float]
     longitude: Optional[float]
     source_url: Optional[str]
+    # Phase B additions (plan A5/B2/B5) -- present in the raw GDELT v1 export
+    # but dropped by this parser until now. Purely additive: existing
+    # consumers of GDELTEvent/to_db_dict are unaffected.
+    action_geo_adm1: Optional[str]
+    actor1_known_group_code: Optional[str]
+    actor2_known_group_code: Optional[str]
+    actor1_type2: Optional[str]
+    actor1_type3: Optional[str]
+    actor2_type2: Optional[str]
+    actor2_type3: Optional[str]
+    is_root_event: Optional[bool]
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +142,14 @@ class GDELTParser:
                 latitude=self._float(row.get("action_geo_lat")),
                 longitude=self._float(row.get("action_geo_long")),
                 source_url=self._str(row.get("source_url")),
+                action_geo_adm1=self._str(row.get("action_geo_adm1_code")),
+                actor1_known_group_code=self._str(row.get("actor1_known_group_code")),
+                actor2_known_group_code=self._str(row.get("actor2_known_group_code")),
+                actor1_type2=self._str(row.get("actor1_type2_code")),
+                actor1_type3=self._str(row.get("actor1_type3_code")),
+                actor2_type2=self._str(row.get("actor2_type2_code")),
+                actor2_type3=self._str(row.get("actor2_type3_code")),
+                is_root_event=self._bool(row.get("is_root_event")),
             )
 
         except (ValueError, KeyError, TypeError) as exc:
@@ -172,6 +191,16 @@ class GDELTParser:
         except ValueError:
             return None
 
+    @staticmethod
+    def _bool(val: Any) -> Optional[bool]:
+        """GDELT's IsRootEvent is '1'/'0', not a real boolean literal."""
+        if val is None:
+            return None
+        s = str(val).strip()
+        if not s:
+            return None
+        return s == "1"
+
     def to_db_dict(self, event: GDELTEvent) -> dict[str, Any]:
         """Convert a GDELTEvent to a dict suitable for bulk DB insert."""
         return {
@@ -198,4 +227,12 @@ class GDELTParser:
             "latitude": event.latitude,
             "longitude": event.longitude,
             "source_url": event.source_url,
+            "action_geo_adm1": event.action_geo_adm1,
+            "actor1_known_group_code": event.actor1_known_group_code,
+            "actor2_known_group_code": event.actor2_known_group_code,
+            "actor1_type2": event.actor1_type2,
+            "actor1_type3": event.actor1_type3,
+            "actor2_type2": event.actor2_type2,
+            "actor2_type3": event.actor2_type3,
+            "is_root_event": event.is_root_event,
         }

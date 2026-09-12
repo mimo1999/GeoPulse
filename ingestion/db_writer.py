@@ -31,7 +31,9 @@ class DBWriter:
             actor2_country, actor2_type1, event_code, event_base_code,
             event_root_code, quad_class, goldstein, num_mentions,
             num_sources, num_articles, avg_tone, action_geo_country,
-            latitude, longitude, source_url
+            latitude, longitude, source_url,
+            action_geo_adm1, actor1_known_group_code, actor2_known_group_code,
+            actor1_type2, actor1_type3, actor2_type2, actor2_type3, is_root_event
         ) VALUES %s
         ON CONFLICT (global_event_id, event_date) DO NOTHING
     """
@@ -133,6 +135,14 @@ class DBWriter:
                 r.get("latitude"),
                 r.get("longitude"),
                 r.get("source_url"),
+                r.get("action_geo_adm1"),
+                r.get("actor1_known_group_code"),
+                r.get("actor2_known_group_code"),
+                r.get("actor1_type2"),
+                r.get("actor1_type3"),
+                r.get("actor2_type2"),
+                r.get("actor2_type3"),
+                r.get("is_root_event"),
             )
             for r in batch
         ]
