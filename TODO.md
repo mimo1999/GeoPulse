@@ -208,7 +208,16 @@ national equity indices as a proxy). Both rejected without running new gates:
 purge), monthly grid, evaluated over the plan's locked 2023-2025 window (35
 folds) using the full 2015-2025 history as training data. Reports pooled,
 active-only (77 countries — matches the plan's measured figure exactly), and
-macro-by-country. Four baselines implemented:
+macro-by-country.
+
+| baseline | active-only accuracy | active-only macro-F1 | pooled accuracy |
+|---|---|---|---|
+| `global_base_rate` | 65.7% | 0.264 | 79.0% |
+| `persistence_flat` | 65.7% | 0.264 | 79.0% |
+| `country_base_rate` | 64.2% | 0.378 | 78.1% |
+| **`lagged_ucdp_only`** | **71.7%** | **0.592** | 82.7% |
+
+Four baselines implemented:
 - `global_base_rate` and `persistence_flat` (always "flat") are numerically
   identical — confirms "flat" is genuinely the training-window mode, exactly
   what the plan's chosen persistence baseline assumes.
