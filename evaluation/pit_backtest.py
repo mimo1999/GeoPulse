@@ -221,6 +221,28 @@ BASELINES: dict[str, Callable] = {
 }
 
 
+def predict_phase_a_gdelt(train: pd.DataFrame, test: pd.DataFrame, a1_features: list[str]) -> np.ndarray:
+    """Phase A model: A3 (UCDP lag history) + A1 (GDELT parquet temporal
+    derivatives) combined. This is the first predictor in the whole plan
+    that actually uses GDELT -- everything before it (baselines 1-4) is
+    either trivial or UCDP-only by design, specifically so this one has a
+    real, non-circular bar to clear. HistGradientBoostingClassifier handles
+    the NaNs in both feature families natively (A3: no history yet for a
+    country's first few months; A1: before parquet coverage starts in 2023)."""
+    feature_cols = A3_FEATURES + a1_features
+    train_f = train.dropna(subset=["log_deaths_prev1"])  # require at least A3 history
+    if train_f["escalation_dir"].nunique() < 2 or len(train_f) < 30:
+        return predict_persistence_flat(train, test)
+
+    X_train = train_f[feature_cols].to_numpy(dtype=float)
+    y_train = train_f["escalation_dir"].to_numpy(dtype=int)
+    X_test = test[feature_cols].to_numpy(dtype=float)
+
+    clf = HistGradientBoostingClassifier(max_iter=150, max_depth=4, random_state=0)
+    clf.fit(X_train, y_train)
+    return clf.predict(X_test).astype(int)
+
+
 # ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
@@ -319,13 +341,20 @@ def run_backtest(
     }
 
 
-def main() -> int:
+def main(include_phase_a: bool = True) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     logger.info("Loading country panel ...")
     df = load_country_panel()
     df = _add_month_index(df)
     df = build_a3_features(df)
+
+    a1_features: list[str] = []
+    if include_phase_a:
+        from preprocessing.pit_features import A1_FEATURES, build_phase_a_panel
+        logger.info("Building Phase A (GDELT parquet) features ...")
+        df = build_phase_a_panel(df)
+        a1_features = A1_FEATURES
 
     # "Active" is scoped to the eval window itself (any event in 2023-2025),
     # matching the plan's ~77-country figure -- NOT lifetime-since-2015
@@ -340,8 +369,12 @@ def main() -> int:
     results = {"target": "escalation_dir (P1)", "eval_window": [EVAL_START.isoformat(), EVAL_END.isoformat()],
                "purge_months": PURGE_MONTHS, "n_active_countries": len(active_fips), "baselines": {}}
 
-    for name, fn in BASELINES.items():
-        logger.info("Running baseline: %s", name)
+    predictors = dict(BASELINES)
+    if include_phase_a:
+        predictors["phase_a_gdelt"] = lambda train, test: predict_phase_a_gdelt(train, test, a1_features)
+
+    for name, fn in predictors.items():
+        logger.info("Running: %s", name)
         results["baselines"][name] = run_backtest(df, fn, active_fips=active_fips)
         active_acc = results["baselines"][name]["active_only"]["accuracy"]
         active_f1 = results["baselines"][name]["active_only"]["macro_f1"]
@@ -352,7 +385,7 @@ def main() -> int:
         json.dump(results, f, indent=2)
     logger.info("Wrote %s", RESULTS_PATH)
 
-    print(f"\n{'baseline':<22}{'n_folds':>8}{'acc(active)':>14}{'macroF1(active)':>17}{'acc(pooled)':>14}")
+    print(f"\n{'model':<22}{'n_folds':>8}{'acc(active)':>14}{'macroF1(active)':>17}{'acc(pooled)':>14}")
     for name, r in results["baselines"].items():
         print(f"{name:<22}{r['n_folds']:>8}{r['active_only']['accuracy']:>14.3f}"
               f"{r['active_only']['macro_f1']:>17.3f}{r['pooled']['accuracy']:>14.3f}")
