@@ -46,9 +46,18 @@ class FeatureExtractor:
         extractor.compute_daily_features(date(2024, 3, 15))
     """
 
-    # SQL to pull all events for a given country+date from partitioned table
-    _FETCH_SQL = """
+    # Single query for ALL countries on a date -- replaces the old
+    # one-query-per-country loop (TODO.md P1: "~35k round trips" over a
+    # 162-day backfill). GROUP BY happens in Python (see
+    # compute_daily_features) rather than in SQL because _compute_features'
+    # category logic (protest/violence/terror flags, goldstein normalization)
+    # is per-event conditional logic that doesn't translate cleanly into a
+    # single aggregate query without duplicating it in two languages: this
+    # keeps one source of truth for the feature definitions and still cuts
+    # the round trips from ~2N per date to 2 total.
+    _FETCH_ALL_SQL = """
         SELECT
+            action_geo_country,
             event_root_code,
             quad_class,
             goldstein,
@@ -56,29 +65,21 @@ class FeatureExtractor:
             num_mentions,
             num_sources
         FROM gdelt_events
-        WHERE action_geo_country = %s
-          AND event_date = %s
+        WHERE event_date = %s
+          AND action_geo_country IS NOT NULL
+          AND action_geo_country != ''
     """
 
-    # Upsert into feature store
-    _UPSERT_SQL = """
-        INSERT INTO country_daily_features (
-            country, feature_date,
-            total_events, conflict_events, cooperation_events,
-            protest_score, violence_score, diplomatic_stress,
-            economic_stress, terrorism_score,
-            avg_sentiment, avg_goldstein,
-            coverage_tier,
-            computed_at
-        ) VALUES (
-            %(country)s, %(feature_date)s,
-            %(total_events)s, %(conflict_events)s, %(cooperation_events)s,
-            %(protest_score)s, %(violence_score)s, %(diplomatic_stress)s,
-            %(economic_stress)s, %(terrorism_score)s,
-            %(avg_sentiment)s, %(avg_goldstein)s,
-            %(coverage_tier)s,
-            NOW()
-        )
+    # Bulk upsert into feature store -- one round trip for every country on
+    # a date, via execute_values, instead of one UPSERT per country.
+    _UPSERT_COLUMNS = [
+        "country", "feature_date", "total_events", "conflict_events", "cooperation_events",
+        "protest_score", "violence_score", "diplomatic_stress",
+        "economic_stress", "terrorism_score", "avg_sentiment", "avg_goldstein", "coverage_tier",
+    ]
+    _UPSERT_SQL = f"""
+        INSERT INTO country_daily_features ({", ".join(_UPSERT_COLUMNS)}, computed_at)
+        VALUES %s
         ON CONFLICT (country, feature_date)
         DO UPDATE SET
             total_events        = EXCLUDED.total_events,
@@ -92,16 +93,22 @@ class FeatureExtractor:
             avg_sentiment       = EXCLUDED.avg_sentiment,
             avg_goldstein       = EXCLUDED.avg_goldstein,
             coverage_tier       = EXCLUDED.coverage_tier,
-            computed_at         = NOW()
+            computed_at         = EXCLUDED.computed_at
     """
 
-    # Get all distinct countries with events on a date
-    _COUNTRIES_SQL = """
-        SELECT DISTINCT action_geo_country
+    # Kept for backward compatibility (tests, ad-hoc debugging of a single
+    # country) -- no longer used by compute_daily_features itself.
+    _FETCH_SQL = """
+        SELECT
+            event_root_code,
+            quad_class,
+            goldstein,
+            avg_tone,
+            num_mentions,
+            num_sources
         FROM gdelt_events
-        WHERE event_date = %s
-          AND action_geo_country IS NOT NULL
-          AND action_geo_country != ''
+        WHERE action_geo_country = %s
+          AND event_date = %s
     """
 
     def __init__(self, dsn: str):
@@ -115,6 +122,12 @@ class FeatureExtractor:
         """
         Compute and upsert daily features for all (or specified) countries.
 
+        One SELECT for every event on target_date (regardless of country),
+        grouped in Python, then one bulk UPSERT -- not one round trip per
+        country. A 162-day backfill over ~200 active countries/day used to
+        cost ~2 round trips per country per day (~65k); this costs 2 per day
+        (~324) regardless of how many countries are active.
+
         Returns:
             Number of country-date rows written.
         """
@@ -122,39 +135,48 @@ class FeatureExtractor:
         try:
             with conn:
                 with conn.cursor() as cur:
-                    # Discover countries if not given
-                    if not countries:
-                        cur.execute(self._COUNTRIES_SQL, (target_date,))
-                        countries = [row[0] for row in cur.fetchall()]
+                    cur.execute(self._FETCH_ALL_SQL, (target_date,))
+                    rows = cur.fetchall()
 
-                    if not countries:
+                    if not rows:
                         logger.info("No events found for %s", target_date)
                         return 0
 
+                    by_country: dict[str, list[tuple]] = {}
+                    for country, *event_fields in rows:
+                        by_country.setdefault(country, []).append(tuple(event_fields))
+
+                    if countries:
+                        by_country = {c: v for c, v in by_country.items() if c in countries}
+
                     logger.info(
-                        "Computing features for %d countries on %s",
-                        len(countries), target_date,
+                        "Computing features for %d countries on %s (%d raw events)",
+                        len(by_country), target_date, len(rows),
                     )
 
-                    rows_written = 0
-                    for country in countries:
-                        cur.execute(self._FETCH_SQL, (country, target_date))
-                        events = cur.fetchall()
-                        if not events:
-                            continue
-
+                    upsert_rows = []
+                    for country, events in by_country.items():
                         feature_row = self._compute_features(country, target_date, events)
-                        cur.execute(self._UPSERT_SQL, feature_row)
-                        rows_written += 1
+                        upsert_rows.append(
+                            tuple(feature_row[col] for col in self._UPSERT_COLUMNS) + (self._now(),)
+                        )
+
+                    if upsert_rows:
+                        psycopg2.extras.execute_values(cur, self._UPSERT_SQL, upsert_rows)
 
             logger.info(
                 "Feature extraction done: %d rows for %s",
-                rows_written, target_date,
+                len(by_country), target_date,
             )
-            return rows_written
+            return len(by_country)
 
         finally:
             conn.close()
+
+    @staticmethod
+    def _now():
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc)
 
     def compute_date_range(
         self,
