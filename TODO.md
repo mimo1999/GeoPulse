@@ -287,6 +287,36 @@ sequencing ("Phase B features → re-run the same harness, report the A→B
 delta"). 7/7 new tests pass (no-future-leakage on the A1 builder, PIT-buffer
 correctness, CAMEO-3 resolution); full suite 146/146.
 
+**2026-09-12 — Step 5 (Phase B ingest) in progress.**
+- `ingestion/gdelt_parser.py` + `ingestion/db_writer.py`: 8 previously-dropped
+  raw GDELT v1 columns now parsed and stored — `action_geo_adm1_code`,
+  `actor1/2_known_group_code`, `actor1/2_type2/3_code`, `is_root_event`
+  (plan's B2/B5 feature families). Purely additive; 9/9 parser tests pass.
+- `scripts/add_phase_b_columns.sql`: 8 new nullable columns on `gdelt_events`
+  + an `(action_geo_country, action_geo_adm1, event_date)` index. Blocked
+  initially on ownership: `gdelt_events` and its 84 monthly partitions were
+  owned by `postgres`, not `gldt`; `ALTER TABLE ... OWNER TO` doesn't cascade
+  to partitions, so `ADD COLUMN` on the partitioned parent failed atomically
+  the moment it reached the first partition `gldt` didn't own. Resolved via
+  `scripts/admin_grant_gldt_ownership.sql` (user ran as `postgres`).
+- `preprocessing/feature_extractor.py`: **fixed the N+1** (TODO.md P1) —
+  one SELECT + one UPSERT per country per day (~200 active countries/day,
+  ~35k round trips over a 162-day backfill) replaced with one SELECT for
+  the whole date grouped in Python + one bulk UPSERT. Verified against live
+  data: `total_events` matches a direct `COUNT(*)` exactly. 2/2 new
+  integration tests pass.
+- **Backfill running**: `python scripts/backfill.py --start 2023-01-01 --end
+  2025-12-31` (1,096 days), started 2026-09-12 15:25, log at
+  `logs/phase_b_backfill.log`. Estimated ~13.75s/day average from prior runs
+  → **~4.2 hours**. First attempt was accidentally killed at 7/1096 by a
+  shell-backgrounding mistake (`&` combined with the harness's own
+  background-task tracking — the wrapper shell exited immediately and orphaned
+  the real process); restarted cleanly, already-ingested dates skip fast so
+  the redo cost was negligible.
+- Not yet done: B1-B7 feature engineering itself (fine-grained CAMEO shares,
+  actor-structural, geographic dispersion, tone distribution) — that's
+  Step 6, waiting on this backfill to finish.
+
 **Knowledge-graph prototype (separate from P0, see earlier discussion):**
 built a relational-as-graph schema (`graph` Postgres schema, Apache AGE
 confirmed not viable — not installable on this Postgres 18/Windows setup)
