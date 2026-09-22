@@ -511,3 +511,47 @@ schema-only, no data). 3/3 new tests pass.
 
 **Not yet done**: the actual Postgres → Neo4j migration (loader), GDS
 plugin install, and the network-evolution analysis itself.
+
+**2026-09-22 — Migration loader built and running; usecase.md broadened.**
+`ingestion/neo4j_migrator.py` migrates `graph.*` into Neo4j per the schema
+doc (keyset pagination, MERGE-idempotent, `verify()` reconciles Postgres
+vs Neo4j counts per type — a real silent-failure mode was found and guarded
+against: Cypher `MATCH` on a not-yet-migrated node produces zero rows, no
+error, so a relationship MERGE against a missing endpoint just silently
+creates nothing). Full migration running now (`logs/neo4j_migration.log`),
+~4-5 hours estimated; country/actor/location done, event ~underway,
+event_actor (the actual interaction edges) not yet started.
+
+**Scope correction** (usecase.md): not a Siemens-specific CI tool — the
+actual target is a general **consolidated global intelligence system**:
+country-level summaries, a highlighted-events feed, an activity heatmap,
+plus the graph/interaction-type/network-analysis work already scoped.
+`usecase.md` updated, original brief kept but marked superseded where it
+names Siemens.
+
+**Gap analysis against the (now-broadened) use case**, done before this
+correction landed:
+- CAMEO → interaction-type mapping: done, verified on real data.
+- The actor-interaction graph itself: mechanically in progress (migration
+  running).
+- The actual network/pattern analysis: **not started** — GDS isn't
+  installed, no centrality/community detection, nothing answering "how do
+  interactions evolve over time" yet. This was, and remains, the real gap
+  — everything else is infrastructure in service of this.
+- No user-facing surface at all — the existing Streamlit app is entirely
+  the old, parked PIT/risk-scoring product (confirmed via grep: zero
+  references to `graph.*`/Neo4j/`interaction_type` anywhere in
+  `streamlit_app/` or `backend/`).
+- Data wart carried forward on purpose: the old June-2026 prototype's
+  1.1M events have `interaction_type IS NULL` (predates the column, kept
+  rather than wiped per earlier instruction) — will show as unexplained
+  nulls to anyone querying interaction types across the full graph unless
+  backfilled or filtered.
+
+**Key architectural point for what comes next**: country summaries,
+highlighted events, and the activity heatmap are all answerable with plain
+aggregate SQL against the already-fully-populated Postgres `graph.*`
+schema — none of them need Neo4j or GDS. Only genuine multi-hop network
+analysis (actor communities, influence propagation) needs the graph DB.
+So the three new visible deliverables can be built now, in parallel with
+the migration finishing in the background, rather than waiting on it.
