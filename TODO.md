@@ -461,3 +461,31 @@ finishes: temporal graph snapshots, interaction-type mix over time,
 actor-centrality / community-detection changes, and a way to surface this
 (dashboard or notebook) for the CI/Corporate-Security/Governmental-Affairs
 audience the brief names.
+
+**2026-09-22 — Neo4j set up (local dev), Docker deferred to prod.** Per
+instruction: a local **Neo4j Desktop** instance (`neo4j://127.0.0.1:7687`,
+enterprise edition under Desktop's dev license) is the DB for now; a
+`neo4j` service was added to `docker/docker-compose.yml` for prod but
+deliberately **not brought up** this session — Docker is a later step.
+
+- `configs/config.yaml` gets a `neo4j` block (uri/user/password/database),
+  matching the existing `database` block's pattern — including its known
+  hardcoded-credential limitation (TODO.md P2), not a new gap.
+- `.env` / `.env.example` document both the local (Desktop) and prod
+  (docker-compose) connection shapes.
+- `ingestion/neo4j_client.py` — thin `Neo4jConfig`/`Neo4jClient` wrapper,
+  mirroring `PipelineConfig.from_yaml`'s existing style. Connectivity
+  verified (simple query + a write/read roundtrip). Deliberately does
+  **not** do anything with the graph model itself yet — connecting to
+  Neo4j and designing/populating what's in it are different steps; the
+  untracked `graph.*` Postgres prototype earlier in this project is a
+  standing example of why blurring that distinction causes real problems
+  later (no producing script, no idea how the data got there).
+- 3/3 new tests pass; full suite 169/169.
+
+Postgres (`graph.*`) remains the actor-interaction graph's actual home for
+now — nothing has been migrated to Neo4j. Loading it in is separate work,
+to be scoped once the 2023-2025 Postgres build (above) finishes and the
+graph model/schema for Neo4j itself is actually designed (Postgres's
+relational shape doesn't have to be Neo4j's node/relationship shape
+verbatim — worth deciding deliberately, not defaulting to a 1:1 port).
