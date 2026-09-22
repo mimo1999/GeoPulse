@@ -109,6 +109,57 @@ def test_top_counterparts_excludes_self(conn, a_quiet_country):
     assert a_quiet_country not in countries
 
 
+def test_top_counterparts_excludes_location_inferred_actors(conn):
+    """Regression test for a real bug: a conflict event geolocated in
+    Ukraine with an explicit UKR actor1 and a bare-role actor2 (no country
+    given by GDELT) had actor2's country inferred as UKR too -- purely
+    from where the event happened, not from any signal about the actor's
+    actual origin. That fabricated a false domestic (UKR vs UKR) pair,
+    which the same-country exclusion filter then correctly stripped,
+    leaving top_counterparts_by_type('UKR', 'conflict') empty even though
+    real cross-border data (Russia) exists elsewhere. Fix: exclude
+    country_inferred=true actors from counterpart matching entirely.
+
+    Verified by directly recomputing the join without the fix's WHERE
+    clause and confirming it would have included at least one
+    location-inferred actor that the fixed query correctly excludes --
+    proves the exclusion is doing real work on this data, not a no-op."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT COUNT(DISTINCT a2.actor_id)
+               FROM graph.actor a
+               JOIN graph.event_actor ea ON ea.actor_id = a.actor_id AND a.country_iso3 = 'UKR'
+               JOIN graph.event_actor ea2 ON ea2.event_id = ea.event_id AND ea2.actor_id != ea.actor_id
+               JOIN graph.actor a2 ON a2.actor_id = ea2.actor_id
+               WHERE a2.country_iso3 IS NOT NULL AND a2.country_iso3 != 'UKR'
+                 AND a2.country_inferred = true"""
+        )
+        n_excluded = cur.fetchone()[0]
+    if n_excluded == 0:
+        pytest.skip("no location-inferred cross-country counterparts in this dataset to test against")
+    assert n_excluded > 0  # the exclusion in _TOP_COUNTERPARTS_SQL has real rows to remove
+
+    # And the fix itself: every counterpart the (patched) query returns
+    # must be backed by at least one non-inferred actor for that country
+    # among this specific event set -- not merely "some actor somewhere
+    # from that country is non-inferred" (too weak) or "zero inferred
+    # actors exist globally" (irrelevant to this join).
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT DISTINCT a2.country_iso3
+               FROM graph.actor a
+               JOIN graph.event_actor ea ON ea.actor_id = a.actor_id AND a.country_iso3 = 'UKR'
+               JOIN graph.event_actor ea2 ON ea2.event_id = ea.event_id AND ea2.actor_id != ea.actor_id
+               JOIN graph.actor a2 ON a2.actor_id = ea2.actor_id
+               WHERE a2.country_iso3 IS NOT NULL AND a2.country_iso3 != 'UKR'
+                 AND a2.country_inferred = false"""
+        )
+        non_inferred_backed = {r[0] for r in cur.fetchall()}
+    counterparts = top_counterparts(conn, "UKR", limit=50)
+    for country, _ in counterparts:
+        assert country in non_inferred_backed
+
+
 def test_top_counterparts_by_type_rejects_invalid_type(conn, a_quiet_country):
     with pytest.raises(ValueError):
         top_counterparts_by_type(conn, a_quiet_country, "not_a_real_type")

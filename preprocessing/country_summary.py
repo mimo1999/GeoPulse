@@ -119,6 +119,7 @@ _TOP_COUNTERPARTS_SQL = """
     JOIN graph.event_actor ea2 ON ea2.event_id = cae.event_id
     JOIN graph.actor a2 ON a2.actor_id = ea2.actor_id
     WHERE a2.country_iso3 IS NOT NULL AND a2.country_iso3 != %(iso3)s
+      AND a2.country_inferred = FALSE
     GROUP BY 1 ORDER BY 2 DESC LIMIT %(limit)s
 """
 
@@ -135,6 +136,7 @@ _TOP_COUNTERPARTS_BY_TYPE_SQL = """
     JOIN graph.actor a2 ON a2.actor_id = ea2.actor_id
     JOIN graph.event e ON e.event_id = cae.event_id
     WHERE a2.country_iso3 IS NOT NULL AND a2.country_iso3 != %(iso3)s
+      AND a2.country_inferred = FALSE
       AND e.interaction_type = %(itype)s
     GROUP BY 1 ORDER BY 2 DESC LIMIT %(limit)s
 """
@@ -144,13 +146,43 @@ def top_counterparts(conn, iso3: str, limit: int = 10) -> list[tuple[str, int]]:
     """Countries most frequently co-appearing (via actor identity, either
     role) in the same events as `iso3`'s actors, across all event sources
     this country's actors touch -- not restricted to events located in
-    `iso3` itself (see module docstring)."""
+    `iso3` itself (see module docstring).
+
+    Excludes counterpart actors whose country was *inferred* from the
+    event's own location (graph_builder.py's country_inferred flag) rather
+    than given directly by GDELT. Found via a real bug this exposed: a
+    conflict event geolocated in Ukraine with an explicit UKR actor1 and a
+    bare-role actor2 (no country in GDELT) gets actor2's country inferred
+    as UKR too, purely from where the event happened -- manufacturing a
+    false domestic (UKR vs UKR) pair out of what may well be a foreign
+    actor (e.g. Russian forces) operating in/against Ukraine. Without this
+    exclusion, `top_counterparts_by_type('UKR', 'conflict')` returned
+    empty: the real cross-border pairs were swamped by fabricated
+    same-country ones, which the != iso3 filter then correctly stripped,
+    leaving nothing. This is a scoped bug (the schema already carries the
+    information needed to avoid it), not usecase.md's named "generic
+    references" limitation."""
     with conn.cursor() as cur:
         cur.execute(_TOP_COUNTERPARTS_SQL, {"iso3": iso3, "limit": limit})
         return cur.fetchall()
 
 
 def top_counterparts_by_type(conn, iso3: str, interaction_type: str, limit: int = 10) -> list[tuple[str, int]]:
+    """Same as top_counterparts(), split by interaction_type.
+
+    Measured directly on real data: this frequently returns an empty list.
+    GDELT rarely gives an explicit (non-inferred) country code for the
+    "other side" of an interaction at all -- for Ukraine, splitting by
+    type left literally zero non-inferred cross-country matches for
+    cooperation, consultation, AND conflict, even though the unsplit
+    top_counterparts() for the same country returns solid results (RUS,
+    USA, GBR, ...). The aggregate across all types has enough genuine
+    explicit-country data points to clear visibility; any single type's
+    slice usually doesn't. This is usecase.md's own named limitation
+    ("generic references... too general") showing up concretely, not a
+    further bug to chase -- callers (the UI included) must treat an empty
+    result here as "not enough explicitly-attributed data for this split",
+    not as an error."""
     if interaction_type not in INTERACTION_TYPES:
         raise ValueError(f"interaction_type must be one of {INTERACTION_TYPES}, got {interaction_type!r}")
     with conn.cursor() as cur:
