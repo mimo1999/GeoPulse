@@ -586,5 +586,35 @@ rankings genuinely diverge (test asserts non-identical top-20 sets) — a
 media, which is the whole point of keeping both instead of one blended
 score. 7/7 new tests pass; full fast suite 177/177.
 
-**Next**: the activity heatmap, per the agreed order. No UI yet for any of
-the three — still backend/query-layer only.
+**2026-09-22 — Activity heatmap built (third of the three); backend API
+mounted; impartial-judge review triggered a real fix.**
+- `preprocessing/activity_heatmap.py` (country choropleth + weekly
+  timeseries) — 3/3 tests pass.
+- `backend/routers/intelligence.py` mounted into `backend/main.py`
+  (5 routes: countries, country summary, highlighted events, heatmap,
+  heatmap timeseries) — verified live against a running server, real data.
+- **Per the `/goal` directive**, spawned an impartial-judge subagent on a
+  suspicious result (`top_counterparts_by_type('UKR','conflict')` empty
+  while the unfiltered version worked). Verdict: real, scoped bug — a
+  bare-role actor's country gets inferred from the *event's own location*
+  (`graph_builder.py`), so a conflict event geolocated in Ukraine with an
+  explicit UKR actor1 and a bare-role actor2 gets actor2 mislabeled UKR
+  too, fabricating false domestic pairs that the same-country exclusion
+  then correctly stripped. Fixed: exclude `country_inferred=true` actors
+  from both counterpart queries. Judge also gave the broader work a clean
+  bill of health on circularity/self-reference (explicitly checked for
+  the earlier ML pipeline's failure pattern, found none), and flagged the
+  real risk directly: **zero UI exists for any of the three backend
+  deliverables** — priority should be a minimal UI before further
+  Neo4j/GDS investment.
+- Measuring the fix's effect surfaced a deeper, real data-quality ceiling:
+  GDELT rarely gives an *explicit* (non-inferred) counterpart country at
+  all -- splitting by interaction_type leaves ~zero non-inferred
+  cross-country matches even for cooperation/consultation, not just
+  conflict. Documented in `top_counterparts_by_type()`'s docstring as the
+  acknowledged "generic references" limitation manifesting concretely;
+  not chased further (anti-rabbit-hole).
+
+**Next, per the judge's priority call**: build a minimal Streamlit UI
+wired to the three completed `/intelligence/*` endpoints before any
+further Neo4j/GDS work.
