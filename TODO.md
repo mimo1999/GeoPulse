@@ -489,3 +489,25 @@ to be scoped once the 2023-2025 Postgres build (above) finishes and the
 graph model/schema for Neo4j itself is actually designed (Postgres's
 relational shape doesn't have to be Neo4j's node/relationship shape
 verbatim — worth deciding deliberately, not defaulting to a 1:1 port).
+
+**2026-09-22 — Postgres graph build finished; Neo4j schema designed.**
+2023-2025 build completed cleanly: 47,795,984 new events (matches the raw
+`gdelt_events` row count for that window exactly, no drops), 77,792,008
+new event_actor edges, on top of the pre-existing June-2026 prototype
+(kept, not wiped). Interaction-type split on the new data: cooperation 48%,
+conflict 27%, consultation 25%.
+
+`docs/neo4j_schema.md` — the target Neo4j node/relationship schema.
+Key calls: `Event` stays a first-class node (not collapsed into a direct
+Actor-Actor edge) specifically to preserve `source_url`/location/optional-
+target fidelity — the thing a CI analyst needs to trust an edge, which
+usecase.md's own "generic references" limitation says is already a
+problem; node identity carries Postgres's already-resolved synthetic IDs
+rather than re-deriving natural keys in Cypher; Actor-Actor network
+analysis recommended via Neo4j GDS graph projections (derived, in-memory)
+rather than a persisted ~80M-row redundant edge type. Applied as 4 NODE KEY
+constraints + 3 indexes via `scripts/init_neo4j_schema.py` (idempotent,
+schema-only, no data). 3/3 new tests pass.
+
+**Not yet done**: the actual Postgres → Neo4j migration (loader), GDS
+plugin install, and the network-evolution analysis itself.
