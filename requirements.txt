@@ -11,6 +11,7 @@ python-multipart==0.0.12
 # --- Database ---
 psycopg2-binary==2.9.10
 SQLAlchemy==2.0.36
+neo4j==6.3.1
 
 # --- ML / Data ---
 torch==2.4.1

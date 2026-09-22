@@ -23,6 +23,19 @@ database:
   echo_sql: false
 
 # ---------------------
+# Neo4j (actor-interaction graph -- usecase.md)
+# ---------------------
+# Local dev: Neo4j Desktop instance. Prod: docker/docker-compose.yml `neo4j`
+# service (see .env.example). Same hardcoded-credential pattern as the
+# `database` block above -- tracked in TODO.md P2 alongside it, not a new
+# gap introduced here.
+neo4j:
+  uri: "neo4j://127.0.0.1:7687"
+  user: "neo4j"
+  password: "geopulsepass"
+  database: "neo4j"
+
+# ---------------------
 # GDELT Ingestion
 # ---------------------
 gdelt:
