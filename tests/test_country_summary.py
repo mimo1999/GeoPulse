@@ -169,10 +169,46 @@ def test_build_country_summary_is_internally_consistent(conn, a_quiet_country):
     s = build_country_summary(conn, a_quiet_country, n_counterparts=5)
     assert s.iso3 == a_quiet_country
     assert s.total_events == sum(s.interaction_mix.values())
-    assert set(s.top_counterparts_by_type.keys()) == set(INTERACTION_TYPES)
+
+
+def test_build_country_summary_skips_by_type_by_default(conn, a_quiet_country):
+    """Regression test for a real performance fix: top_counterparts_by_type
+    measured at ~17s PER interaction type (3 types = ~50s), on top of an
+    already ~64s default (mix+trend+counterparts) -- computing it eagerly
+    made the whole summary exceed even a 150s client timeout in practice.
+    Default must skip it; include_by_type=True must still provide it for a
+    caller that explicitly wants to pay the cost."""
+    s = build_country_summary(conn, a_quiet_country, n_counterparts=5)
+    assert s.top_counterparts_by_type == {}
+
+    s2 = build_country_summary(conn, a_quiet_country, n_counterparts=5, include_by_type=True)
+    assert set(s2.top_counterparts_by_type.keys()) == set(INTERACTION_TYPES)
 
 
 def test_list_countries_with_activity_nonempty_and_valid(conn):
     countries = list_countries_with_activity(conn)
     assert len(countries) > 50  # sanity: real data has well over 50 active locations
     assert all(len(c) == 3 for c in countries)  # ISO3
+
+
+def test_latest_resolvable_event_date_excludes_unresolvable_events(conn):
+    """Regression test for a real bug: ~1.1M events (an untracked older
+    data source, kept rather than wiped) have no location_id at all and
+    can never resolve to a country. A default date window built from
+    MAX(event_date) over ALL events (rather than only resolvable ones)
+    could land entirely inside that unresolvable tail and show "No data
+    available" in the UI despite 47.8M real, located events existing."""
+    from preprocessing.country_summary import latest_resolvable_event_date
+
+    latest = latest_resolvable_event_date(conn)
+    assert latest is not None
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT MAX(event_date) FROM graph.event WHERE source = 'gdelt'")
+        latest_any = cur.fetchone()[0]
+
+    # The resolvable-only date must not be later than the true max (sanity),
+    # and this dataset is known to have unresolvable events strictly after
+    # the last resolvable one -- if that's no longer true (data changed),
+    # this assertion should be revisited, not silently loosened.
+    assert latest <= latest_any

@@ -195,14 +195,26 @@ def top_counterparts_by_type(conn, iso3: str, interaction_type: str, limit: int 
 # ---------------------------------------------------------------------------
 
 def build_country_summary(conn, iso3: str, since: Optional[date] = None,
-                           n_counterparts: int = 10) -> CountrySummary:
+                           n_counterparts: int = 10, include_by_type: bool = False) -> CountrySummary:
+    """include_by_type defaults to False. Measured directly (2026-09-22,
+    no concurrent load): interaction_mix ~24s, event_volume_trend ~22s,
+    top_counterparts ~18s, top_counterparts_by_type ~17s EACH of the 3
+    types -- computing all of it synchronously totals over 100s, well past
+    any reasonable request timeout, for a feature that (per
+    top_counterparts_by_type's own docstring) is frequently empty anyway.
+    Default summary costs ~64s (mix+trend+counterparts); the by-type
+    breakdown is opt-in for a caller that specifically wants it and can
+    wait. The real fix is a materialized per-country rollup, not attempted
+    here -- see TODO.md."""
     trend = event_volume_trend(conn, iso3, since)
     mix = interaction_mix(conn, iso3, since)
     counterparts = top_counterparts(conn, iso3, limit=n_counterparts)
-    by_type = {
-        t: top_counterparts_by_type(conn, iso3, t, limit=n_counterparts)
-        for t in INTERACTION_TYPES
-    }
+    by_type = {}
+    if include_by_type:
+        by_type = {
+            t: top_counterparts_by_type(conn, iso3, t, limit=n_counterparts)
+            for t in INTERACTION_TYPES
+        }
     return CountrySummary(
         iso3=iso3,
         total_events=sum(mix.values()),
@@ -211,6 +223,26 @@ def build_country_summary(conn, iso3: str, since: Optional[date] = None,
         top_counterparts=counterparts,
         top_counterparts_by_type=by_type,
     )
+
+
+def latest_resolvable_event_date(conn) -> Optional[date]:
+    """MAX(event_date) among events that can actually resolve to a country
+    (have a non-null location_id) -- NOT the same as MAX(event_date) over
+    all events. Found via a real bug: ~1.1M events (the untracked
+    June-2026 prototype, kept per instruction rather than wiped) have no
+    location_id at all and are invisible to every location-based query in
+    this module. Naively defaulting a "since" window to wall-clock
+    date.today() - 90d landed inside that unresolvable tail and showed
+    "No data available" in the UI, despite 47.8M real, located events
+    sitting in the same table for 2023-2025. Callers should build default
+    date-range windows from this, never from date.today()."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT MAX(e.event_date) FROM graph.event e "
+            "JOIN graph.location l ON l.location_id = e.location_id "
+            "WHERE e.source = 'gdelt'"
+        )
+        return cur.fetchone()[0]
 
 
 def list_countries_with_activity(conn) -> list[str]:
