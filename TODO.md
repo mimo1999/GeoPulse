@@ -618,3 +618,82 @@ mounted; impartial-judge review triggered a real fix.**
 **Next, per the judge's priority call**: build a minimal Streamlit UI
 wired to the three completed `/intelligence/*` endpoints before any
 further Neo4j/GDS work.
+
+---
+
+## 2026-09-22 (cont'd) — UI + backend wired end-to-end; migration completed with a perfect verification match
+
+**Neo4j migration finished while the UI work was underway.** Full
+Postgres → Neo4j migration completed cleanly: 79,615,573 event_actor
+relationships, 48,913,654 events, 51,849 actors, 245,075 locations, 244
+countries. `verify()`'s Postgres-vs-Neo4j reconciliation matched **exactly**
+on all 7 node/relationship types (country, actor, location, event,
+initiated, targeted, canonical_of) — no drift, no silent drops.
+
+**Backend API built and mounted**: `backend/routers/intelligence.py`,
+5 routes (`/intelligence/meta`, `/countries`, `/country/{iso3}/summary`,
+`/events/highlighted`, `/heatmap`, `/heatmap/timeseries`), wired into
+`backend/main.py` alongside the parked PIT routes. `/meta` +
+`_default_since()` anchor date-range defaults to the data's own latest
+*resolvable* date, never wall-clock `date.today()` — a real bug (see
+below) that would otherwise show "No data available" indefinitely.
+
+**Streamlit UI built**: `streamlit_app/pages/02_global_intelligence.py`,
+3 tabs (Activity Heatmap, Highlighted Events, Country Summary), added as
+a third nav entry. **This is the first user-facing surface for any of the
+broadened use case's three deliverables** — previously backend-only.
+
+**Two real bugs found and fixed while getting the UI to actually work**
+(both via hands-on browser verification, not by inspection):
+
+1. **"No data available" on first load.** `since = date.today() - 90d`
+   landed in mid-2026, past the dense 2023-2025 dataset and inside ~1.1M
+   events (the untracked June-2026 prototype, kept per instruction) that
+   have **no `location_id` at all** and are invisible to every location-
+   based query. Fixed: `latest_resolvable_event_date()` anchors all
+   defaults to the data's own latest resolvable date instead. Caught a
+   second-order version of the same bug (`@st.cache_data` had cached the
+   bad wall-clock fallback from before the fix existed) — required a full
+   Streamlit process restart, not just a code fix, to actually take effect.
+
+2. **Country Summary was non-functional** — `build_country_summary()`
+   computed `top_counterparts_by_type` (3 types × ~17s each) eagerly on
+   top of an already ~64s base (mix/trend/counterparts), exceeding even a
+   150s client timeout in live testing. Measured this directly, with the
+   Neo4j migration's contention fully gone, to confirm it was genuine
+   query cost at 48.9M-event scale, not an artifact — then made the
+   by-type breakdown opt-in (a UI button, not eager), since it was also
+   independently confirmed the least reliable piece (frequently empty).
+   Default path now completes in ~20-60s. **Explicitly did not** chase
+   deeper query optimization (index tuning, rewriting the join strategy)
+   — that would have been the rabbit hole the session's own goal warned
+   against; a materialized per-country rollup (this project's own
+   precedent, `country_daily_features`) is named as the real fix and left
+   as scoped future work.
+
+**Verified live, in a running browser, against a live backend + Postgres**
+(not just unit tests): Activity Heatmap (227 countries, 1.48M events,
+22.5% avg conflict share), Highlighted Events (real tagged results,
+including the Benin coup and Greenland spike found earlier), Country
+Summary (UKR: 39,091 events, correct interaction mix, volume trend,
+counterparts, ~20s load).
+
+**Impartial-judge review invoked twice this session** (per the `/goal`
+directive), both times independently and both times catching something
+real: the `country_inferred` counterpart bug (Step above) and, informally,
+the "zero UI exists" priority call that redirected this entire stretch of
+work. No self-referential/circular design smells found in any of the three
+new modules — checked explicitly against the earlier ML pipeline's known
+failure pattern (labels as a function of their own features) each time.
+
+**Honest state of `usecase.md` right now:**
+- ✅ CAMEO → interaction-type mapping — done, tested, used throughout.
+- ✅ Actor-interaction graph — built in Postgres, fully migrated to Neo4j
+  with a verified exact match.
+- 🟡 Country summaries / highlighted events / activity heatmap (the
+  broadened scope) — backend **and now UI** built, tested, verified live.
+  Performance is acceptable, not fast; documented, not hidden.
+- ❌ The actual network-pattern analysis (WHAT's third original bullet —
+  actor communities, influence over time) — still not started. GDS is not
+  installed. This remains the one piece of the original brief nothing has
+  been built against yet.
