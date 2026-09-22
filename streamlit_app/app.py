@@ -419,11 +419,13 @@ def main():
 # (as expanders: Escalation Alerts, Contagion Network).
 # ---------------------------------------------------------------------------
 
-pg_home      = st.Page(main, title="Global Risk Map", icon="🌍", default=True)
-pg_drilldown = st.Page("pages/01_country_drilldown.py", title="Country Drilldown", icon="🔍")
+pg_home         = st.Page(main, title="Global Risk Map", icon="🌍", default=True)
+pg_drilldown    = st.Page("pages/01_country_drilldown.py", title="Country Drilldown", icon="🔍")
+pg_intelligence = st.Page("pages/02_global_intelligence.py", title="Global Intelligence", icon="🌐")
 
 nav = st.navigation({
     "Overview": [pg_home],
     "Country Intelligence": [pg_drilldown],
+    "Global Intelligence": [pg_intelligence],
 })
 nav.run()
