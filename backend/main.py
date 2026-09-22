@@ -170,6 +170,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from backend.routers.intelligence import router as intelligence_router  # noqa: E402
+app.include_router(intelligence_router)
+
 
 # ---------------------------------------------------------------------------
 # Request / Response schemas
