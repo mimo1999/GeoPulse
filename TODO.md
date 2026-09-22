@@ -399,3 +399,65 @@ Pearson-correlation spillover table (8,244 vs 93 edges/month). POLECAT and
 UCDP are staged (`graph.polecat_stage`, `graph.ucdp_stage`) but not yet
 wired into the unified graph tables — UCDP needs rebuilding against the
 correct GED file above before that happens.
+
+---
+
+## 2026-09-22 — Pivot: back to the core CI use case
+
+The actual brief (see [usecase.md](usecase.md), transcribed from the source slide)
+is a Competitive Intelligence tool: transform GDELT into an **actor-interaction
+graph over time**, map CAMEO codes to **interpretable interaction types**
+(cooperation/consultation/conflict), and **analyze how the network evolves**.
+This is materially different from the UCDP/PIT conflict-*prediction* pipeline
+(`evaluation/pit_backtest.py`, `preprocessing/pit_labels.py` etc., Steps 0-6
+above) — no forecast target, no UCDP ground truth, no walk-forward backtest.
+
+**Decision**: pivot to the graph use case as the primary deliverable. The
+PIT/UCDP pipeline is **paused, not deleted** — it stays in the repo as
+working, tested code (all 152+ tests still pass) in case the project returns
+to conflict prediction later, but active work now targets `usecase.md`.
+
+**Found**: the existing `graph.*` Postgres schema (see the prototype note
+above) had **no producing script anywhere in the repo** — it was built by ad
+hoc commands from an earlier session and only existed as live DB state.
+Given the project's standing discipline about reproducibility, this was
+formalized first (`scripts/init_graph_schema.sql`, matches the live schema
+exactly) before adding anything new to it.
+
+**Built**:
+- `data/cameo_codes.py` — the CAMEO root-code → `{cooperation, consultation,
+  conflict}` mapping, the single source of truth for usecase.md's
+  interaction-type requirement. `consultation` (root 04) isolated
+  specifically because the brief names it as its own bucket; CAMEO's
+  `quad_class` alone can't isolate it, only the root code can.
+- `data/cameo_actor_types.py` — the ~30 well-known CAMEO institutional role
+  codes (GOV, MIL, REB, ...), used to detect a "bare role" actor (e.g. GOV,
+  GOVMIL) whose country can only be inferred from event context.
+- `ingestion/graph_builder.py` — populates `graph.event/event_actor/actor/
+  location` from `gdelt_events`. Entity resolution: GDELT's own
+  `actor{1,2}_country` field first; falls back to inferring country from
+  the event's own location **only** when the actor code is a recognized
+  bare role (CAMEO's own convention, not a guess); otherwise left NULL —
+  usecase.md's own named limitation ("generic references... too general"),
+  surfaced as queryable NULLs rather than papered over. Actor identity is
+  `(source, raw_code, country_iso3)`, so GOV/USA and GOV/CAN are always
+  distinct — the exact bug class the June-2026 prototype had partially
+  fixed already, now backed by tested, committed code instead of an ad hoc
+  one-off. Additive and idempotent throughout (`ON CONFLICT`), so it runs
+  safely alongside the existing June-2026 prototype rows, which — per
+  instruction — were kept rather than wiped.
+- 19 new tests across the three modules (all pass), including an
+  actor-country-collapse check and a rerun-produces-no-duplicates check.
+
+**In progress**: full graph build over 2023-2025 (`logs/graph_builder.log`),
+same window as the PIT pipeline's raw backfill — no new data collection
+needed, purely processing the 47.8M events already in `gdelt_events`.
+~70 minutes estimated from the observed rate (90/1096 days in ~6 minutes).
+
+**Not yet done**: the network-evolution analysis itself (WHAT's third bullet
+— "analyze the resulting interaction network to identify patterns... and how
+they evolve over time"). That's the next real deliverable once the build
+finishes: temporal graph snapshots, interaction-type mix over time,
+actor-centrality / community-detection changes, and a way to surface this
+(dashboard or notebook) for the CI/Corporate-Security/Governmental-Affairs
+audience the brief names.
