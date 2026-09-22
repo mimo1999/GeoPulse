@@ -697,3 +697,17 @@ failure pattern (labels as a function of their own features) each time.
   actor communities, influence over time) — still not started. GDS is not
   installed. This remains the one piece of the original brief nothing has
   been built against yet.
+
+**Second impartial-judge pass, on this stretch specifically: clean.**
+Independently re-verified (not taking the above narrative on faith):
+`_default_since`/`latest_resolvable_event_date` really do anchor to real
+data, not wall-clock time; `include_by_type` really defaults to `False`
+end-to-end (module → route → UI); the `country_inferred` fix from earlier
+really is in the SQL. Confirmed the opt-in by-type trim is a legitimate
+scoping call against `usecase.md`'s actual wording (it asks for interaction
+mix + top counterparts, not a counterparts×type cross-tab) — not a hidden
+feature cut. Confirmed `tests/test_country_summary.py` runs against real
+Postgres, not mocks, so "verified" claims aren't dressed-up unit tests.
+Confirmed no GDS/community-detection code exists anywhere in the repo, so
+"network analysis not started" is accurate, not understated. **Nothing
+flagged needs to be unwound.**
