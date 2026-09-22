@@ -573,5 +573,18 @@ A materialized per-country rollup (this project already has the pattern —
 `country_daily_features` from the old pipeline) is the likely fix once
 real usage patterns are known; not built preemptively.
 
-**Next**: highlighted events, then the activity heatmap, per the agreed
-order. No UI yet for any of the three — still backend/query-layer only.
+**2026-09-22 — Highlighted events built (second of the three).**
+`preprocessing/highlighted_events.py`. Kept all three significance
+dimensions per event rather than collapsing to one score, per instruction:
+media (`num_mentions`), goldstein (`abs(intensity)`, magnitude not sign),
+spike (country-day z-score vs trailing 30-day baseline for that country,
+excluding countries with <14 days of history). Verified on real Dec-2025
+data: the spike dimension surfaced a genuine Benin military coup (z=12.06)
+and the Greenland attention spike (z=34.83); confirmed goldstein and media
+rankings genuinely diverge (test asserts non-identical top-20 sets) — a
+-10.0-Goldstein, 2-mention event ranks top on goldstein and nowhere on
+media, which is the whole point of keeping both instead of one blended
+score. 7/7 new tests pass; full fast suite 177/177.
+
+**Next**: the activity heatmap, per the agreed order. No UI yet for any of
+the three — still backend/query-layer only.
