@@ -1,7 +1,31 @@
 # GeoPulse — Core Use Case
 
 Source: Competitive Intelligence (CI) use-case brief (slide 3), transcribed verbatim in
-structure and content. This is the reference use case the project is being grounded against.
+structure and content below. This is the reference use case the project is being grounded
+against, **broadened per direction (2026-09-22)** — see the note immediately below before
+reading the transcribed brief.
+
+## Actual scope (supersedes "Siemens Healthineers" framing below)
+
+This is **not** being built for Siemens specifically — that was the brief's illustrative
+example, not the target. The real target is a **consolidated global intelligence system**,
+general-purpose, with:
+
+- **Country-level summaries** — per-country rollups: event volume, interaction-type mix
+  (cooperation/consultation/conflict), trend over time, top interacting counterpart
+  countries/actors.
+- **Highlighted events** — a surfaced feed of the most significant events (by media
+  attention/mentions, intensity, or anomaly relative to a country's own baseline), not just
+  raw event lists.
+- **An activity heatmap** — geographic visualization of event volume/intensity, using the
+  graph's location data.
+- **The general uses already scoped below** — the actor-interaction graph, CAMEO-to-
+  interaction-type mapping, and network-pattern analysis over time.
+
+The transcribed brief below still supplies the graph/interaction-type/network-analysis
+requirements (WHAT section) and the underlying data approach (HOW/Data sections) — those are
+unchanged and still the foundation. Only the *audience and packaging* (a specific company's CI
+function) is superseded by the broader system above.
 
 ---
 
@@ -47,6 +71,9 @@ structure and content. This is the reference use case the project is being groun
 - Source: GDELT 2.0: Our Global World in Realtime — The GDELT Project.
 
 ## Estimated Potential
+
+*(Superseded — see "Actual scope" at the top of this document. Kept here only as the
+original brief's own framing, not as current direction.)*
 
 - Beyond Competitive Intelligence, the dataset can support other functions such as Corporate
   Security or Governmental Affairs by analyzing geopolitical developments and identifying
