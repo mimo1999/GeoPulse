@@ -555,3 +555,23 @@ schema — none of them need Neo4j or GDS. Only genuine multi-hop network
 analysis (actor communities, influence propagation) needs the graph DB.
 So the three new visible deliverables can be built now, in parallel with
 the migration finishing in the background, rather than waiting on it.
+
+**2026-09-22 — Country summaries built (first of the three).**
+`preprocessing/country_summary.py`: event volume trend, interaction-type
+mix, top counterpart countries, per country -- plain aggregate SQL,
+Postgres only. Two indexes added first (`graph.event.location_id`,
+`graph.actor.country_iso3`) -- `graph.event` had no way to join back to
+`Location`/`Country` without a full 48.9M-row scan. `untyped_event_count()`
+surfaces the pre-`interaction_type` prototype rows explicitly rather than
+silently excluding them from a mix that would then under-report a
+country's real total. 8/8 new tests pass; full fast suite 177/177.
+
+**Performance is not dashboard-ready yet**, measured directly: ~25s for a
+single busy country even with both indexes, partly genuine cost at this
+scale, partly contention with the Neo4j migration running concurrently.
+A materialized per-country rollup (this project already has the pattern —
+`country_daily_features` from the old pipeline) is the likely fix once
+real usage patterns are known; not built preemptively.
+
+**Next**: highlighted events, then the activity heatmap, per the agreed
+order. No UI yet for any of the three — still backend/query-layer only.
