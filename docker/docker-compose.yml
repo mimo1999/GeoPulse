@@ -83,6 +83,31 @@ services:
               count: all
               capabilities: [gpu]
 
+  neo4j:
+    image: neo4j:5-community
+    container_name: geopulse_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-geopulse_neo4j_dev}
+      # Community edition ships one DB per instance; named for parity with
+      # the eventual prod graph, not because multi-db is available here.
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7474:7474"   # HTTP -- Neo4j Browser
+      - "7687:7687"   # Bolt -- driver connections (Python neo4j package, cypher-shell)
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   scheduler:
     build:
       context: ..
@@ -104,3 +129,6 @@ volumes:
   model_cache:
   ollama_models:
   gdelt_downloads:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
