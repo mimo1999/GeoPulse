@@ -45,7 +45,7 @@ The Home bar chart is colored by trend: red increasing, blue decreasing, yellow 
 - **Counterparts are sparse.** GDELT rarely gives an explicit country for the other side of an interaction, so by-type counterpart breakdowns are often empty.
 - **Duplicate country codes.** A few countries appear under both a FIPS and an ISO-3 code with different scores. The dashboard disambiguates them but the data is not merged.
 
-Not part of the dashboard and treated as experiments: the forecasting, GNN, and RAG-advisory code (`streamlit_app/_parked/`, `models/`, `inference/`), and a point-in-time conflict-prediction pipeline (`preprocessing/pit_*.py`, `evaluation/pit_backtest.py`) that was paused. `TODO.md` records the history and open items.
+Not part of the dashboard and treated as experiments: the forecasting, GNN, and RAG-advisory code (`streamlit_app/_parked/`, `models/`, `inference/`), and a point-in-time conflict-prediction pipeline (`preprocessing/pit_*.py`, `evaluation/pit_backtest.py`) that was paused.
 
 ---
 
@@ -67,7 +67,7 @@ FastAPI backend   /global/*, /country/*, /intelligence/*
 Streamlit dashboard   (Home, Country Drilldown, Global Intelligence)
 ```
 
-Neo4j is optional. It currently holds a copy of the event graph (loaded with `ingestion/neo4j_migrator.py`) and nothing in the dashboard reads from it. The graph schema is documented in [`docs/neo4j_schema.md`](docs/neo4j_schema.md), and the target use case in [`usecase.md`](usecase.md).
+Neo4j is optional. It currently holds a copy of the event graph (loaded with `ingestion/neo4j_migrator.py`) and nothing in the dashboard reads from it. The graph schema is documented in [`docs/neo4j_schema.md`](docs/neo4j_schema.md).
 
 **Stack:** Python 3.10+, FastAPI + Uvicorn, PostgreSQL, Streamlit + Plotly, Neo4j (optional).
 
@@ -96,13 +96,14 @@ CREATE DATABASE gdelt_risk OWNER gldt;
 Then load data and run:
 
 ```bash
-python scripts/seed_db_from_cache.py    # activity index, from data/real_cache (no download needed)
+python scripts/seed_db_from_cache.py    # activity index, from the parquet cache in data/real_cache
 python -m uvicorn backend.main:app --port 8000
 streamlit run streamlit_app/app.py --server.port 8501
 ```
 
 On Windows, `run_app.ps1` starts both (backend on 8000, dashboard on 8501).
 
+- **`data/real_cache/` is not in the repository.** Build it once with `python scripts/train_real_data.py --epochs 1`, which downloads GDELT daily files (bi-weekly by default) into `data/real_cache/`. It also trains a small model as a side effect, which the dashboard does not use. Later runs can pass `--cache-only`.
 - **Home and Country Drilldown** work after the seed step.
 - **Global Intelligence** also needs the `graph.*` tables populated from GDELT events (`ingestion/graph_builder.py`); without them its tabs are empty.
 - **Neo4j (optional):** `python scripts/init_neo4j_schema.py`, then `ingestion/neo4j_migrator.py`. Connection settings are in `.env`.

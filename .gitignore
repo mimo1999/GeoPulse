@@ -14,7 +14,8 @@ build/
 .env.local
 
 # Data (generated cache and raw dumps — source files in data/ are tracked)
-# data/real_cache/  (seeded cache committed directly)
+# bi-weekly parquet feature cache; rebuild with scripts/train_real_data.py
+data/real_cache/
 data/UCDP/
 data/POLECAT/
 # regenerable: python -m preprocessing.pit_features / pit_features_b
@@ -33,6 +34,11 @@ models/checkpoints/
 # Logs
 logs/
 *.log
+
+# Local notes and tooling config (kept on disk, not tracked)
+.claude/
+TODO.md
+usecase.md
 
 # IDE
 .vscode/

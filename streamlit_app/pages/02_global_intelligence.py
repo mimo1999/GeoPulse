@@ -211,7 +211,7 @@ def render_country_summary(summary: dict, iso3: str, since: str):
             "GDELT rarely gives an explicit, non-inferred country for the 'other side' of an "
             "interaction. Splitting counterparts by type frequently returns little or nothing, "
             "even when the all-types view above has solid data — this is a real data-coverage "
-            "limit (usecase.md's own \"generic references\" caveat), not a loading error. Also "
+            "limit, not a loading error. Also "
             "slow (~50s, 3 expensive queries) -- loaded only on request, not by default."
         )
         if st.button("Load breakdown by type", key=f"load_by_type_{iso3}"):
@@ -275,7 +275,7 @@ with tab_country:
         "Can take up to ~60 seconds to load — every figure here is a live aggregate over "
         "the full 48.9M-event dataset, not a precomputed rollup. A materialized per-country "
         "rollup (like this project's existing country_daily_features table) is the planned "
-        "fix; see TODO.md. The interaction-type breakdown below is even slower and loads "
+        "fix. The interaction-type breakdown below is even slower and loads "
         "only on request."
     )
     if countries:
