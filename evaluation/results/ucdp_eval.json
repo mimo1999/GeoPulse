@@ -1,0 +1,208 @@
+{
+  "label_source": "ucdp_organized_violence_cy_v26.1",
+  "evaluation_year": 2024,
+  "n_ucdp_countries": 86,
+  "n_backtest_countries": 210,
+  "n_matched": 85,
+  "ucdp_prevalence": {
+    "any_armed_conflict": 40,
+    "war_label_gt100_deaths": 25,
+    "terror_label_gt50_os": 23,
+    "high_death_gt200": 30
+  },
+  "spearman_rank_correlation": {
+    "risk_vs_total_deaths_rho": 0.4605,
+    "risk_vs_total_deaths_p": 0.0,
+    "risk_vs_sb_deaths_rho": 0.4344,
+    "risk_vs_sb_deaths_p": 0.0
+  },
+  "auc_roc": {
+    "risk_score_vs_any_armed_conflict": 0.6878,
+    "risk_score_vs_war_gt100_deaths": 0.776,
+    "risk_score_vs_terror_os_gt50": 0.6865,
+    "risk_score_vs_high_death_gt200": 0.7879
+  },
+  "top_conflicts_by_deaths": [
+    {
+      "fips": "UP",
+      "country_name": "Ukraine",
+      "avg_pred_risk": 0.7452,
+      "ucdp_total_deaths": 91779,
+      "ucdp_sb_deaths": 91762,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "IS",
+      "country_name": "Israel",
+      "avg_pred_risk": 0.7848,
+      "ucdp_total_deaths": 21622,
+      "ucdp_sb_deaths": 21571,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "MX",
+      "country_name": "Mexico",
+      "avg_pred_risk": 0.6629,
+      "ucdp_total_deaths": 11036,
+      "ucdp_sb_deaths": 0,
+      "any_sb_conflict": 0,
+      "war_label": 0
+    },
+    {
+      "fips": "RS",
+      "country_name": "Russia (Soviet Union)",
+      "avg_pred_risk": 0.7603,
+      "ucdp_total_deaths": 10590,
+      "ucdp_sb_deaths": 10444,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "SU",
+      "country_name": "Sudan",
+      "avg_pred_risk": 0.7577,
+      "ucdp_total_deaths": 7103,
+      "ucdp_sb_deaths": 4680,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "CG",
+      "country_name": "DR Congo (Zaire)",
+      "avg_pred_risk": 0.6418,
+      "ucdp_total_deaths": 5446,
+      "ucdp_sb_deaths": 1166,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "LE",
+      "country_name": "Lebanon",
+      "avg_pred_risk": 0.7904,
+      "ucdp_total_deaths": 4339,
+      "ucdp_sb_deaths": 4339,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "ET",
+      "country_name": "Ethiopia",
+      "avg_pred_risk": 0.5943,
+      "ucdp_total_deaths": 4159,
+      "ucdp_sb_deaths": 2886,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "SY",
+      "country_name": "Syria",
+      "avg_pred_risk": 0.7463,
+      "ucdp_total_deaths": 3621,
+      "ucdp_sb_deaths": 2736,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "NI",
+      "country_name": "Nigeria",
+      "avg_pred_risk": 0.6126,
+      "ucdp_total_deaths": 3201,
+      "ucdp_sb_deaths": 1483,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "BM",
+      "country_name": "Myanmar (Burma)",
+      "avg_pred_risk": 0.7378,
+      "ucdp_total_deaths": 2896,
+      "ucdp_sb_deaths": 2352,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "SO",
+      "country_name": "Somalia",
+      "avg_pred_risk": 0.6198,
+      "ucdp_total_deaths": 2437,
+      "ucdp_sb_deaths": 2187,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "PK",
+      "country_name": "Pakistan",
+      "avg_pred_risk": 0.7112,
+      "ucdp_total_deaths": 1969,
+      "ucdp_sb_deaths": 1568,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "ML",
+      "country_name": "Mali",
+      "avg_pred_risk": 0.5277,
+      "ucdp_total_deaths": 1901,
+      "ucdp_sb_deaths": 1008,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "BR",
+      "country_name": "Brazil",
+      "avg_pred_risk": 0.6278,
+      "ucdp_total_deaths": 1676,
+      "ucdp_sb_deaths": 0,
+      "any_sb_conflict": 0,
+      "war_label": 0
+    },
+    {
+      "fips": "HA",
+      "country_name": "Haiti",
+      "avg_pred_risk": 0.6634,
+      "ucdp_total_deaths": 1333,
+      "ucdp_sb_deaths": 217,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "NG",
+      "country_name": "Niger",
+      "avg_pred_risk": 0.6025,
+      "ucdp_total_deaths": 1235,
+      "ucdp_sb_deaths": 952,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "YM",
+      "country_name": "Yemen (North Yemen)",
+      "avg_pred_risk": 0.7748,
+      "ucdp_total_deaths": 1030,
+      "ucdp_sb_deaths": 936,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "CO",
+      "country_name": "Colombia",
+      "avg_pred_risk": 0.6053,
+      "ucdp_total_deaths": 786,
+      "ucdp_sb_deaths": 233,
+      "any_sb_conflict": 1,
+      "war_label": 1
+    },
+    {
+      "fips": "OD",
+      "country_name": "South Sudan",
+      "avg_pred_risk": 0.5169,
+      "ucdp_total_deaths": 697,
+      "ucdp_sb_deaths": 25,
+      "any_sb_conflict": 1,
+      "war_label": 0
+    }
+  ],
+  "interpretation": "AUC-ROC > 0.70 with UCDP labels indicates the model ranks truly conflicted countries higher, validating discrimination power independent of GDELT. Spearman rho > 0.50 indicates monotone relationship between predicted risk and actual organized-violence lethality."
+}
