@@ -1,5 +1,5 @@
 {
-  "model_path": "D:\\Projects\\Geopulse\\models\\checkpoints\\gnn_best.pt",
+  "model_path": "models/checkpoints/gnn_best.pt",
   "n_dates": 20,
   "date_range": [
     "2025-06-01",

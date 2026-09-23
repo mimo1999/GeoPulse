@@ -1,5 +1,5 @@
 {
-  "model_path": "D:\\Projects\\Gldt_project\\models\\real_data_model.pt",
+  "model_path": "models/real_data_model.pt",
   "data_source": "polecat:dataverse_files.zip",
   "label_source": "plover_native_counts",
   "years": null,

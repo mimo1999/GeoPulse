@@ -1,6 +1,6 @@
 {
-  "model_path": "D:\\Projects\\Gldt_project\\models\\real_data_model.pt",
-  "data_source": "parquet:D:\\Projects\\Geopulse\\data\\real_cache",
+  "model_path": "models/real_data_model.pt",
+  "data_source": "parquet:data/real_cache",
   "test_start": "2025-06-01",
   "test_end": "2026-03-22",
   "n_samples": 3403,

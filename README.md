@@ -38,7 +38,8 @@ The Home bar chart is colored by trend: red increasing, blue decreasing, yellow 
 
 - **The activity index is a heuristic.** Weights are hand-picked and unvalidated. See [`scoring/composite.py`](scoring/composite.py), the single implementation of the formula; weights come from `configs/config.yaml`.
 - **Sparse coverage.** GDELT coverage is uneven, so countries with little coverage score less reliably.
-- **`avg_sentiment` and `avg_goldstein` are inconsistent** across the pipelines that write them (seed script, live ingestion, POLECAT), so those two signals are left out of the live scoring paths.
+- **`avg_sentiment` and `avg_goldstein` are inconsistent** across the pipelines that write them (seed script, live ingestion, POLECAT), so those two signals are left out of every scoring path that reads them back from the database. Only the parquet-seeding script, which sees the original values, uses them.
+- **No network analysis yet.** The event graph is loaded into Neo4j and its schema is defined, but no graph analysis (communities, influence over time) has been built. The Graph Data Science plugin is not installed.
 - **Data window.** The seeded activity index ends in March 2026 and the `graph.*` event data in February 2026.
 - **Country Summary is slow** (about 20-60 seconds): every figure is a live aggregate over the full event table. A materialized per-country rollup would fix this.
 - **Counterparts are sparse.** GDELT rarely gives an explicit country for the other side of an interaction, so by-type counterpart breakdowns are often empty.
@@ -66,7 +67,7 @@ FastAPI backend   /global/*, /country/*, /intelligence/*
 Streamlit dashboard   (Home, Country Drilldown, Global Intelligence)
 ```
 
-Neo4j is optional and only used for graph analysis work. The graph schema is documented in [`docs/neo4j_schema.md`](docs/neo4j_schema.md), and the target use case in [`usecase.md`](usecase.md).
+Neo4j is optional. It currently holds a copy of the event graph (loaded with `ingestion/neo4j_migrator.py`) and nothing in the dashboard reads from it. The graph schema is documented in [`docs/neo4j_schema.md`](docs/neo4j_schema.md), and the target use case in [`usecase.md`](usecase.md).
 
 **Stack:** Python 3.10+, FastAPI + Uvicorn, PostgreSQL, Streamlit + Plotly, Neo4j (optional).
 
@@ -74,17 +75,37 @@ Neo4j is optional and only used for graph analysis work. The graph schema is doc
 
 ## Quick start
 
-**Prerequisites:** Python 3.10+, PostgreSQL with the schema from `docker/init.sql` (plus `scripts/init_graph_schema.sql` for the Global Intelligence tables).
+**Prerequisites:** Python 3.10+ and PostgreSQL. Neo4j is only needed for the optional graph load.
 
 ```bash
 pip install -r requirements.txt
 cp .env.example .env          # set POSTGRES_USER / PASSWORD / DB
-python scripts/seed_db_from_cache.py   # seed the activity index from data/real_cache
-python -m uvicorn backend.main:app --port 8000
-streamlit run streamlit_app/app.py --server.port 8502
 ```
 
-On Windows, `run_app.ps1` starts both. The Global Intelligence tabs need the `graph.*` tables populated (`ingestion/graph_builder.py`).
+Create the database and schema (as a Postgres superuser):
+
+```sql
+CREATE ROLE gldt WITH LOGIN PASSWORD 'gldt_secret';
+CREATE DATABASE gdelt_risk OWNER gldt;
+\c gdelt_risk
+\i docker/init.sql
+\i docker/migrations/001_add_coverage_tier.sql
+\i scripts/init_graph_schema.sql      -- graph.* tables used by Global Intelligence
+```
+
+Then load data and run:
+
+```bash
+python scripts/seed_db_from_cache.py    # activity index, from data/real_cache (no download needed)
+python -m uvicorn backend.main:app --port 8000
+streamlit run streamlit_app/app.py --server.port 8501
+```
+
+On Windows, `run_app.ps1` starts both (backend on 8000, dashboard on 8501).
+
+- **Home and Country Drilldown** work after the seed step.
+- **Global Intelligence** also needs the `graph.*` tables populated from GDELT events (`ingestion/graph_builder.py`); without them its tabs are empty.
+- **Neo4j (optional):** `python scripts/init_neo4j_schema.py`, then `ingestion/neo4j_migrator.py`. Connection settings are in `.env`.
 
 ## Tests
 
