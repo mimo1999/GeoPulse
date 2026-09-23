@@ -43,6 +43,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from scoring.composite import DEFAULT_SCORER
+
 
 # ---------------------------------------------------------------------------
 # Positional Encoding (identical to risk_model.py — no import to keep
@@ -118,7 +120,9 @@ class EscalationForecaster(nn.Module):
         horizon:       Forecast horizon steps (default 4 bi-weekly periods).
     """
 
-    RISK_WEIGHTS = {"instability": 0.40, "war": 0.30, "terrorism": 0.20, "financial": 0.10}
+    # See models/risk_model.py's identical re-export for why this stays a
+    # plain class attribute rather than a direct DEFAULT_SCORER reference.
+    RISK_WEIGHTS = dict(DEFAULT_SCORER.weights)
     TASK_IDX     = {"instability": 0, "war": 1, "terrorism": 2, "financial": 3, "risk_score": 4}
 
     def __init__(

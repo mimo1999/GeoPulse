@@ -52,6 +52,7 @@ _UPSERT_SQL = """
         protest_score, violence_score, diplomatic_stress,
         economic_stress, terrorism_score,
         avg_sentiment, avg_goldstein,
+        risk_score, confidence,
         computed_at
     ) VALUES (
         %(country)s, %(feature_date)s,
@@ -59,6 +60,7 @@ _UPSERT_SQL = """
         %(protest_score)s, %(violence_score)s, %(diplomatic_stress)s,
         %(economic_stress)s, %(terrorism_score)s,
         %(avg_sentiment)s, %(avg_goldstein)s,
+        %(risk_score)s, %(confidence)s,
         NOW()
     )
     ON CONFLICT (country, feature_date)
@@ -73,6 +75,8 @@ _UPSERT_SQL = """
         terrorism_score     = EXCLUDED.terrorism_score,
         avg_sentiment       = EXCLUDED.avg_sentiment,
         avg_goldstein       = EXCLUDED.avg_goldstein,
+        risk_score          = EXCLUDED.risk_score,
+        confidence          = EXCLUDED.confidence,
         computed_at         = NOW()
 """
 

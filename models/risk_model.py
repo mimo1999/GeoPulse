@@ -37,6 +37,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from scoring.composite import DEFAULT_SCORER
+
 
 # ---------------------------------------------------------------------------
 # Positional Encoding
@@ -134,12 +136,14 @@ class HybridRiskTransformer(nn.Module):
         Risk = 0.4·I + 0.3·W + 0.2·T + 0.1·F
     """
 
-    RISK_WEIGHTS = {
-        "instability": 0.40,
-        "war":         0.30,
-        "terrorism":   0.20,
-        "financial":   0.10,
-    }
+    # Thin re-export of scoring.composite.DEFAULT_SCORER's weights, kept as a
+    # plain class attribute (rather than only referencing DEFAULT_SCORER
+    # directly) because checkpoints saved via .save() serialize this exact
+    # dict as part of the model config (see load()/save() below) -- forward()
+    # still applies it with torch's .clamp() rather than
+    # DEFAULT_SCORER.compute_composite_risk() itself, since that method's
+    # min()/max() are for Python scalars, not batched tensors.
+    RISK_WEIGHTS = dict(DEFAULT_SCORER.weights)
 
     def __init__(
         self,

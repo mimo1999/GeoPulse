@@ -20,6 +20,7 @@ import torch
 from models.risk_model import HybridRiskTransformer
 from models.dataset import FEATURE_COLUMNS, NUM_FEATURES
 from advisory.rule_engine import AdvisoryEngine, RiskAdvisory
+from scoring.composite import DEFAULT_SCORER
 
 logger = logging.getLogger("inference.scorer")
 
@@ -144,13 +145,14 @@ class RiskScorer:
         if as_of is None:
             as_of = date.today()
 
-        feature_matrix, coverage_tier = self._load_features(country, as_of)
+        feature_matrix, coverage_tier, last_real_date = self._load_features(country, as_of)
         trend = self._compute_trend(country, as_of)
 
         if self._model is not None:
             scores = self._neural_score(feature_matrix)
         else:
-            scores = self._heuristic_score(feature_matrix)
+            recency_days = (as_of - last_real_date).days if last_real_date else None
+            scores = self._heuristic_score(feature_matrix, recency_days)
 
         advisory = self._advisory.generate(
             country=country,
@@ -203,11 +205,14 @@ class RiskScorer:
     # Feature loading
     # ------------------------------------------------------------------
 
-    def _load_features(self, country: str, as_of: date) -> tuple[np.ndarray, str]:
+    def _load_features(self, country: str, as_of: date) -> tuple[np.ndarray, str, Optional[date]]:
         """Load (seq_len, num_features) matrix, forward-filled.
 
         Returns:
-            (matrix, coverage_tier) where coverage_tier is from the most recent row.
+            (matrix, coverage_tier, last_real_date) where coverage_tier is
+            from the most recent row and last_real_date is the most recent
+            date that had an actual (non-forward-filled) row -- used to
+            derive heuristic_confidence's staleness penalty.
         """
         start = as_of - timedelta(days=self._seq_len - 1)
         cols = ", ".join(FEATURE_COLUMNS)
@@ -227,6 +232,7 @@ class RiskScorer:
         by_date = {row[0]: (list(row[1:-1]), row[-1]) for row in rows}
         matrix = np.zeros((self._seq_len, NUM_FEATURES), dtype=np.float32)
         coverage_tier = "unknown"
+        last_real_date: Optional[date] = None
 
         last_valid = None
         for i in range(self._seq_len):
@@ -237,10 +243,11 @@ class RiskScorer:
                 matrix[i] = vals
                 last_valid = vals
                 coverage_tier = tier or "unknown"
+                last_real_date = d
             elif last_valid is not None:
                 matrix[i] = last_valid
 
-        return matrix, coverage_tier
+        return matrix, coverage_tier, last_real_date
 
     def _last_day_features(self, matrix: np.ndarray) -> dict[str, float]:
         last = matrix[-1]
@@ -299,45 +306,47 @@ class RiskScorer:
             "confidence":  float(out["confidence"].item()),
         }
 
-    def _heuristic_score(self, matrix: np.ndarray) -> dict[str, float]:
+    def _heuristic_score(
+        self, matrix: np.ndarray, recency_days: Optional[int] = None
+    ) -> dict[str, float]:
         """
-        Simple weighted heuristic for when no model is trained yet.
-        Uses the last 14 days of features.
+        Weighted heuristic for when no model is trained yet, delegating to
+        scoring.composite.CompositeRiskScorer -- the same implementation
+        scripts/seed_db_from_cache.py uses, replacing this method's
+        previously-separate (and differently-weighted) formula. Uses the
+        last 14 days of features.
         """
         recent = matrix[-14:]
         col_idx = {c: i for i, c in enumerate(FEATURE_COLUMNS)}
 
-        violence    = float(np.mean(recent[:, col_idx["violence_score"]]))
-        protest     = float(np.mean(recent[:, col_idx["protest_score"]]))
-        diplo       = float(np.mean(recent[:, col_idx["diplomatic_stress"]]))
-        terror      = float(np.mean(recent[:, col_idx["terrorism_score"]]))
-        economic    = float(np.mean(recent[:, col_idx["economic_stress"]]))
-        sentiment   = float(np.mean(recent[:, col_idx["avg_sentiment"]]))
-
-        instability = min(0.6 * violence + 0.4 * protest, 1.0)
-        war         = min(0.7 * violence + 0.3 * diplo, 1.0)
-        terrorism   = min(terror * 1.2, 1.0)
-        financial   = min(economic * 1.1, 1.0)
-
-        risk_score = (
-            0.40 * instability
-            + 0.30 * war
-            + 0.20 * terrorism
-            + 0.10 * financial
+        violence = float(np.mean(recent[:, col_idx["violence_score"]]))
+        protest = float(np.mean(recent[:, col_idx["protest_score"]]))
+        diplomatic_stress = float(np.mean(recent[:, col_idx["diplomatic_stress"]]))
+        terror = float(np.mean(recent[:, col_idx["terrorism_score"]]))
+        economic = float(np.mean(recent[:, col_idx["economic_stress"]]))
+        # conflict_signal and tone_negativity are intentionally omitted (they
+        # default to 0.0 in compute_subscores). country_daily_features.avg_goldstein
+        # and avg_sentiment carry different conventions depending on which pipeline
+        # wrote the row: the parquet-seeded rows hold percentile-ranked values with
+        # goldstein already inverted (higher = more conflictual), live-ingested rows
+        # hold (raw+10)/20 (higher = more cooperative), and POLECAT rows hold a
+        # cooperation fraction. Rather than guess a sign per row, leave them out.
+        sub = DEFAULT_SCORER.compute_subscores({
+            "protest": protest,
+            "violence": violence,
+            "diplomatic_stress": diplomatic_stress,
+            "economic_stress": economic,
+            "terrorism": terror,
+        })
+        risk_score = DEFAULT_SCORER.compute_composite_risk(
+            sub["instability"], sub["war"], sub["terrorism"], sub["financial"]
         )
 
-        # Confidence is low when data is sparse (many zero rows)
+        # Confidence is low when data is sparse (many zero rows) and/or stale.
         coverage = float(np.sum(matrix.sum(axis=1) > 0)) / self._seq_len
-        confidence = coverage * 0.6    # max 0.6 for heuristic
+        confidence = DEFAULT_SCORER.heuristic_confidence(coverage, recency_days)
 
-        return {
-            "instability": instability,
-            "war":         war,
-            "terrorism":   terrorism,
-            "financial":   financial,
-            "risk_score":  min(risk_score, 1.0),
-            "confidence":  confidence,
-        }
+        return {**sub, "risk_score": risk_score, "confidence": confidence}
 
     # ------------------------------------------------------------------
     # Persistence
@@ -359,7 +368,7 @@ class RiskScorer:
                         "confidence":    pred.confidence,
                         "trend":         pred.trend,
                         "advisory_text": pred.advisory.advisory_text,
-                        "model_version": "v0.1-heuristic" if self._model is None else "v0.1",
+                        "model_version": "v0.2-unified-heuristic" if self._model is None else "v0.1",
                     },
                 )
             conn.close()

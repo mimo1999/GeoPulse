@@ -40,6 +40,8 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
+from scoring.composite import DEFAULT_SCORER
+
 logger = logging.getLogger("models.forecaster_dataset")
 
 FEATURE_NAMES = [
@@ -58,29 +60,39 @@ def features_to_labels(feat: np.ndarray) -> np.ndarray:
     Map a (7,) feature vector to a (5,) label vector.
     [instability, war, terrorism, financial, risk_score]
 
-    Formula mirrors _heuristic_score() in inference/risk_scorer.py
-    so training targets are consistent with runtime scoring.
+    Delegates to scoring.composite.CompositeRiskScorer -- the same
+    implementation inference/risk_scorer.py and scripts/seed_db_from_cache.py
+    use -- so training targets can't drift from runtime scoring. f6 is passed
+    through as conflict_signal unchanged: percentile_normalize_day
+    (scripts/train_real_data.py) inverts it before ranking, so it is already
+    higher = more conflictual and numerically identical to this function's
+    previous direct use of goldstein.
     """
-    protest   = float(feat[0])
-    violence  = float(feat[1])
-    diplo     = float(feat[2])
-    economic  = float(feat[3])
-    terror    = float(feat[4])
-    tone_neg  = float(feat[5])
+    protest = float(feat[0])
+    violence = float(feat[1])
+    diplo = float(feat[2])
+    economic = float(feat[3])
+    terror = float(feat[4])
+    tone_neg = float(feat[5])
     goldstein = float(feat[6])
+    conflict_signal = goldstein  # f6 is already inverted (higher = more conflictual) by percentile_normalize_day
 
-    instability = min(0.5 * violence + 0.5 * protest, 1.0)
-    war         = min(0.4 * violence + 0.4 * diplo + 0.2 * goldstein, 1.0)
-    terrorism   = min(terror * 1.2, 1.0)
-    financial   = min(0.7 * economic + 0.3 * tone_neg, 1.0)
-    risk_score  = min(
-        0.40 * instability
-        + 0.30 * war
-        + 0.20 * terrorism
-        + 0.10 * financial,
-        1.0,
+    sub = DEFAULT_SCORER.compute_subscores({
+        "protest": protest,
+        "violence": violence,
+        "diplomatic_stress": diplo,
+        "economic_stress": economic,
+        "terrorism": terror,
+        "tone_negativity": tone_neg,
+        "conflict_signal": conflict_signal,
+    })
+    risk_score = DEFAULT_SCORER.compute_composite_risk(
+        sub["instability"], sub["war"], sub["terrorism"], sub["financial"]
     )
-    return np.array([instability, war, terrorism, financial, risk_score], dtype=np.float32)
+    return np.array(
+        [sub["instability"], sub["war"], sub["terrorism"], sub["financial"], risk_score],
+        dtype=np.float32,
+    )
 
 
 # ---------------------------------------------------------------------------

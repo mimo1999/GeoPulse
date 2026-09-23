@@ -28,41 +28,58 @@ import psycopg2.extras
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scoring.composite import DEFAULT_SCORER  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("seed_db")
 
 
 # ---------------------------------------------------------------------------
-# Risk computation (mirrors forecaster_dataset.py)
+# Risk computation -- delegates to scoring.composite.CompositeRiskScorer,
+# the single implementation of this formula (see that module's docstring).
 # ---------------------------------------------------------------------------
 
 def compute_all(row: dict) -> tuple:
-    # Column order is defined by the writer, scripts/train_real_data.py:93-101
-    # (FEATURE_NAMES), and independently documented at
-    # models/forecaster_dataset.py:9-11:
-    #     f5 = tone_neg (avg_sentiment),  f6 = goldstein_norm
-    # This function previously read f5 as goldstein and f6 as tone -- transposed.
-    # Since this script is the sole writer of country_daily_features.risk_score,
-    # and evaluation/backtester.py:170 uses that column as its "actual", every
-    # backtest number produced before this fix was scored against a target built
-    # from swapped columns. Re-seed and re-run after changing this.
-    #
-    # Note also: percentile_normalize_day (train_real_data.py:256) inverts f6
-    # before ranking, so f6 is *inverted*-goldstein -- higher = more conflictual.
-    protest  = float(row.get("f0", 0))
-    violence = float(row.get("f1", 0))
-    diplo    = float(row.get("f2", 0))
-    economic = float(row.get("f3", 0))
-    terror   = float(row.get("f4", 0))
-    tone      = float(row.get("f5", 0))
-    goldstein = float(row.get("f6", 0))
+    """Column semantics per scripts/train_real_data.py's FEATURE_NAMES /
+    models/forecaster_dataset.py's PARQUET_FEAT_COLS (the actual writers of
+    this parquet cache): f0=protest, f1=violence, f2=diplo_stress,
+    f3=economic_stress, f4=terrorism_score, f5=tone_neg (avg_sentiment),
+    f6=goldstein_norm. This function previously read f5 as goldstein and f6
+    as tone -- transposed -- and, since this script is the sole writer of
+    country_daily_features.risk_score (which evaluation/backtester.py scores
+    against), every backtest number produced before that fix was scored
+    against a target built from swapped columns.
 
-    instability = min(0.5 * violence + 0.5 * protest, 1.0)
-    war         = min(0.4 * violence + 0.4 * diplo + 0.2 * goldstein, 1.0)
-    terrorism   = min(terror * 1.2, 1.0)
-    financial   = min(0.7 * economic + 0.3 * tone, 1.0)
-    risk        = min(0.40 * instability + 0.30 * war + 0.20 * terrorism + 0.10 * financial, 1.0)
-    return protest, violence, diplo, economic, terror, goldstein, tone, instability, war, terrorism, financial, risk
+    Every column is percentile-ranked per day by percentile_normalize_day
+    (train_real_data.py) before being cached, and that function inverts f6
+    *before* ranking, so f6 is already higher = more conflictual. It needs no
+    further inversion here (an earlier revision of this function applied
+    1 - f6 and double-inverted it)."""
+    protest = float(row.get("f0", 0))
+    violence = float(row.get("f1", 0))
+    diplo_stress = float(row.get("f2", 0))
+    economic = float(row.get("f3", 0))
+    terror = float(row.get("f4", 0))
+    tone_neg = float(row.get("f5", 0))
+    goldstein_norm = float(row.get("f6", 0))
+    conflict_signal = goldstein_norm
+
+    sub = DEFAULT_SCORER.compute_subscores({
+        "protest": protest,
+        "violence": violence,
+        "diplomatic_stress": diplo_stress,
+        "economic_stress": economic,
+        "terrorism": terror,
+        "tone_negativity": tone_neg,
+        "conflict_signal": conflict_signal,
+    })
+    risk = DEFAULT_SCORER.compute_composite_risk(
+        sub["instability"], sub["war"], sub["terrorism"], sub["financial"]
+    )
+    return (
+        protest, violence, diplo_stress, economic, terror, goldstein_norm, tone_neg,
+        sub["instability"], sub["war"], sub["terrorism"], sub["financial"], risk,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +96,9 @@ def seed(cache_dir: str, dsn: str) -> None:
 
     # ---- 1. country_daily_features ----
     logger.info("Seeding country_daily_features...")
-    daily_rows = []
+    raw_rows = []
     country_ts: dict = defaultdict(list)
+    country_snapshot_count: dict = defaultdict(int)
 
     for fpath in files:
         df = pd.read_parquet(fpath)
@@ -90,11 +108,20 @@ def seed(cache_dir: str, dsn: str) -> None:
             snap_date = r["date"]
             if hasattr(snap_date, "date"):
                 snap_date = snap_date.date()
-            daily_rows.append((
-                r["country"], snap_date,
-                p, v, d, e, t, g, tone, risk, 0.75,
-            ))
+            raw_rows.append((r["country"], snap_date, p, v, d, e, t, g, tone, risk))
             country_ts[r["country"]].append(risk)
+            country_snapshot_count[r["country"]] += 1
+
+    # Confidence is real per-country coverage (how many of the total
+    # snapshots this country actually appeared in), not the hardcoded 0.75
+    # literal this replaced -- see scoring/composite.py's docstring. There's
+    # no meaningful "days since last real row" for a historical backfill row
+    # (it was current when written), so data_recency_days is left None.
+    daily_rows = [
+        (country, snap_date, p, v, d, e, t, g, tone, risk,
+         DEFAULT_SCORER.heuristic_confidence(country_snapshot_count[country] / len(files)))
+        for country, snap_date, p, v, d, e, t, g, tone, risk in raw_rows
+    ]
 
     cur = conn.cursor()
     psycopg2.extras.execute_values(cur, """
@@ -127,9 +154,12 @@ def seed(cache_dir: str, dsn: str) -> None:
             trend = "increasing" if delta > 0.02 else "decreasing" if delta < -0.02 else "stable"
         else:
             trend = "stable"
+        confidence = DEFAULT_SCORER.heuristic_confidence(
+            country_snapshot_count[r["country"]] / len(files)
+        )
         pred_rows.append((
             r["country"], risk, inst, war, terror, fin,
-            0.75, trend, f"Risk {risk:.2f} ({trend})", "v0.3-parquet",
+            confidence, trend, f"Risk {risk:.2f} ({trend})", "v0.4-unified-heuristic",
         ))
 
     psycopg2.extras.execute_values(cur, """

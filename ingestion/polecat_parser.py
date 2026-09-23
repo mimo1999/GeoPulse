@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Iterator
 
 from data.iso3_to_fips import iso3_to_fips
+from scoring.composite import DEFAULT_SCORER
 
 logger = logging.getLogger("ingestion.polecat_parser")
 
@@ -181,6 +182,34 @@ def parse_file(
         total_coded = acc["conflict"] + acc["coop"]
         avg_sentiment = round(acc["coop"] / total_coded, 6) if total_coded else 0.5
 
+        protest_score = ratio(acc["protest"])
+        violence_score = ratio(acc["violence"])
+        economic_score = ratio(acc["economic"])
+        terrorism_score = ratio(acc["terror"])
+
+        # tone_negativity intentionally omitted (defaults to 0.0 in
+        # compute_subscores): this module's avg_sentiment is a cooperation
+        # FRACTION (higher=more cooperative), a third, different convention
+        # from both feature_extractor.py's ((avg_tone+100)/200, higher=more
+        # positive tone) and scripts/seed_db_from_cache.py's (tone_neg,
+        # higher=more negative tone) -- see the flagged follow-up task for
+        # reconciling what country_daily_features.avg_sentiment actually
+        # means across its three writers.
+        sub = DEFAULT_SCORER.compute_subscores({
+            "protest": protest_score,
+            "violence": violence_score,
+            "diplomatic_stress": diplomatic_stress,
+            "economic_stress": economic_score,
+            "terrorism": terrorism_score,
+            "conflict_signal": diplomatic_stress,
+        })
+        risk_score = DEFAULT_SCORER.compute_composite_risk(
+            sub["instability"], sub["war"], sub["terrorism"], sub["financial"]
+        )
+        # No rolling window available per-row here either; reuse the same
+        # event-count-based coverage proxy as feature_extractor.py.
+        confidence = DEFAULT_SCORER.heuristic_confidence(min(n / 100, 1.0))
+
         rows[(fips, ev_date)] = {
             # Normalised feature columns (model input, matches country_daily_features)
             "country":            fips,
@@ -188,13 +217,15 @@ def parse_file(
             "total_events":       n,
             "conflict_events":    acc["conflict"],
             "cooperation_events": acc["coop"],
-            "protest_score":      ratio(acc["protest"]),
-            "violence_score":     ratio(acc["violence"]),
+            "protest_score":      protest_score,
+            "violence_score":     violence_score,
             "diplomatic_stress":  diplomatic_stress,
-            "economic_stress":    ratio(acc["economic"]),
-            "terrorism_score":    ratio(acc["terror"]),
+            "economic_stress":    economic_score,
+            "terrorism_score":    terrorism_score,
             "avg_sentiment":      avg_sentiment,
             "avg_goldstein":      goldstein_norm,
+            "risk_score":         round(risk_score, 6),
+            "confidence":         confidence,
             # Raw PLOVER event counts — used for native label computation
             # in eval_polecat.py without re-deriving labels from feature ratios.
             "n_assault":  acc["assault"],

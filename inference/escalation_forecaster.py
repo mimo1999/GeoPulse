@@ -1,5 +1,5 @@
 """
-Runtime escalation forecasting engine.
+Phase 3: Runtime escalation forecasting engine.
 
 Wraps EscalationForecaster for API and pipeline use.
 Loads country features from country_daily_features table,
@@ -25,6 +25,7 @@ import torch
 
 from models.forecaster import EscalationForecaster
 from models.dataset import FEATURE_COLUMNS, NUM_FEATURES
+from scoring.composite import DEFAULT_SCORER
 try:
     from evaluation.calibration import ConformalCalibrator as _ConformalCalibrator
 except ImportError:  # evaluation package absent (e.g. inference-only deploy)
@@ -395,19 +396,36 @@ class EscalationForecasterEngine:
         """
         last_30 = features[-30:] if features.shape[0] >= 30 else features
 
-        # Simple heuristic risk from features (same as RiskScorer heuristic)
-        protest    = float(np.mean(last_30[:, 0]))
-        violence   = float(np.mean(last_30[:, 1]))
-        diplo      = float(np.mean(last_30[:, 2]))
-        economic   = float(np.mean(last_30[:, 3]))
-        terror     = float(np.mean(last_30[:, 4]))
-        tone_neg   = float(np.mean(last_30[:, 5]))
+        # Heuristic risk from features, delegated to
+        # scoring.composite.CompositeRiskScorer -- the same implementation
+        # inference/risk_scorer.py and scripts/seed_db_from_cache.py use.
+        # This previously re-implemented the formula a third time, missing
+        # the goldstein/conflict term from "war" entirely (a genuine
+        # divergence, not just different coefficients).
+        protest = float(np.mean(last_30[:, 0]))
+        violence = float(np.mean(last_30[:, 1]))
+        diplomatic_stress = float(np.mean(last_30[:, 2]))
+        economic = float(np.mean(last_30[:, 3]))
+        terror = float(np.mean(last_30[:, 4]))
+        # conflict_signal / tone_negativity intentionally omitted: avg_goldstein
+        # (col 6) and avg_sentiment (col 5) mean different things depending on
+        # which pipeline wrote the row (see inference/risk_scorer.py).
+        sub = DEFAULT_SCORER.compute_subscores({
+            "protest": protest,
+            "violence": violence,
+            "diplomatic_stress": diplomatic_stress,
+            "economic_stress": economic,
+            "terrorism": terror,
+        })
+        instability, war, terrorism, financial = (
+            sub["instability"], sub["war"], sub["terrorism"], sub["financial"]
+        )
+        base_risk = DEFAULT_SCORER.compute_composite_risk(instability, war, terrorism, financial)
 
-        instability = min(0.5 * violence + 0.5 * protest, 1.0)
-        war         = min(0.4 * violence + 0.4 * diplo, 1.0)
-        terrorism   = min(terror * 1.2, 1.0)
-        financial   = min(0.7 * economic + 0.3 * tone_neg, 1.0)
-        base_risk   = (0.4 * instability + 0.3 * war + 0.2 * terrorism + 0.1 * financial)
+        # Confidence: real, coverage-based, replacing the hardcoded 0.40
+        # literal every step previously got regardless of data quality.
+        coverage = float(np.sum(features.sum(axis=1) > 0)) / features.shape[0]
+        trend_confidence = DEFAULT_SCORER.heuristic_confidence(coverage)
 
         # Simple linear trend over last 30 days
         trend = float(np.polyfit(np.arange(last_30.shape[0]),
@@ -426,7 +444,7 @@ class EscalationForecasterEngine:
                 war_probability=war,
                 terrorism_risk=terrorism,
                 financial_stress=financial,
-                confidence=0.40,
+                confidence=trend_confidence,
                 variance=0.05,
                 lower_bound=float(np.clip(projected_risk - 0.08, 0, 1)),
                 upper_bound=float(np.clip(projected_risk + 0.08, 0, 1)),

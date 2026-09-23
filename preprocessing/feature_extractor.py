@@ -23,6 +23,8 @@ from typing import Any
 import psycopg2
 import psycopg2.extras
 
+from scoring.composite import DEFAULT_SCORER
+
 logger = logging.getLogger("preprocessing.feature_extractor")
 
 
@@ -75,7 +77,8 @@ class FeatureExtractor:
     _UPSERT_COLUMNS = [
         "country", "feature_date", "total_events", "conflict_events", "cooperation_events",
         "protest_score", "violence_score", "diplomatic_stress",
-        "economic_stress", "terrorism_score", "avg_sentiment", "avg_goldstein", "coverage_tier",
+        "economic_stress", "terrorism_score", "avg_sentiment", "avg_goldstein",
+        "risk_score", "confidence", "coverage_tier",
     ]
     _UPSERT_SQL = f"""
         INSERT INTO country_daily_features ({", ".join(_UPSERT_COLUMNS)}, computed_at)
@@ -92,6 +95,8 @@ class FeatureExtractor:
             terrorism_score     = EXCLUDED.terrorism_score,
             avg_sentiment       = EXCLUDED.avg_sentiment,
             avg_goldstein       = EXCLUDED.avg_goldstein,
+            risk_score          = EXCLUDED.risk_score,
+            confidence          = EXCLUDED.confidence,
             coverage_tier       = EXCLUDED.coverage_tier,
             computed_at         = EXCLUDED.computed_at
     """
@@ -271,18 +276,51 @@ class FeatureExtractor:
         else:
             coverage_tier = "high"
 
+        protest_score = ratio(protest_count)
+        violence_score = ratio(violence_count)
+        economic_score = ratio(economic_count)
+        terrorism_score = ratio(terror_count)
+
+        # diplomatic_stress is already 1-avg_goldstein_norm (higher=worse),
+        # so it doubles directly as the war subscore's conflict_signal term
+        # -- both are the same underlying quantity in this pipeline.
+        # tone_negativity is deliberately omitted (left at compute_subscores'
+        # default 0.0): this module's avg_sentiment = (avg_tone+100)/200 is
+        # higher-for-*positive*-tone, the opposite sign convention from the
+        # tone_neg (higher-for-negative-tone) that scripts/seed_db_from_cache.py
+        # feeds into the same slot for parquet-backfilled rows -- a real,
+        # unresolved cross-writer inconsistency in what this column means,
+        # not something to paper over by guessing a sign here.
+        sub = DEFAULT_SCORER.compute_subscores({
+            "protest": protest_score,
+            "violence": violence_score,
+            "diplomatic_stress": diplomatic_stress,
+            "economic_stress": economic_score,
+            "terrorism": terrorism_score,
+            "conflict_signal": diplomatic_stress,
+        })
+        risk_score = DEFAULT_SCORER.compute_composite_risk(
+            sub["instability"], sub["war"], sub["terrorism"], sub["financial"]
+        )
+        # No rolling window at this call site (one day's events only) -- use
+        # the same event-count threshold that already defines coverage_tier's
+        # "high" bucket (n>=100) as a continuous coverage_fraction proxy.
+        confidence = DEFAULT_SCORER.heuristic_confidence(min(n / 100, 1.0))
+
         return {
             "country":             country,
             "feature_date":        feature_date,
             "total_events":        n,
             "conflict_events":     conflict_count,
             "cooperation_events":  coop_count,
-            "protest_score":       round(ratio(protest_count), 6),
-            "violence_score":      round(ratio(violence_count), 6),
+            "protest_score":       round(protest_score, 6),
+            "violence_score":      round(violence_score, 6),
             "diplomatic_stress":   round(diplomatic_stress, 6),
-            "economic_stress":     round(ratio(economic_count), 6),
-            "terrorism_score":     round(ratio(terror_count), 6),
+            "economic_stress":     round(economic_score, 6),
+            "terrorism_score":     round(terrorism_score, 6),
             "avg_sentiment":       round(avg_sentiment_norm, 6),
             "avg_goldstein":       round(avg_goldstein_norm, 6),
+            "risk_score":          round(risk_score, 6),
+            "confidence":          confidence,
             "coverage_tier":       coverage_tier,
         }
