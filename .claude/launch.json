@@ -2,16 +2,19 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "geopulse-streamlit",
-      "runtimeExecutable": "streamlit",
-      "runtimeArgs": ["run", "D:/Projects/Geopulse/streamlit_app/app.py", "--server.port", "8501", "--server.headless", "true"],
-      "port": 8501
+      "name": "geopulse-backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "port": 8000
     },
     {
-      "name": "geopulse-backend",
-      "runtimeExecutable": "uvicorn",
-      "runtimeArgs": ["backend.main:app", "--host", "0.0.0.0", "--port", "8000"],
-      "port": 8000
+      "name": "geopulse-streamlit",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "streamlit", "run", "streamlit_app/app.py", "--server.port", "8502", "--server.headless", "true", "--server.address", "localhost"],
+      "port": 8502,
+      "env": {
+        "BACKEND_URL": "http://localhost:8000"
+      }
     }
   ]
 }

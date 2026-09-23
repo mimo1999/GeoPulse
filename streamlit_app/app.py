@@ -17,19 +17,81 @@ Layout:
 from __future__ import annotations
 
 import math
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import streamlit as st
 
-from ui import BACKEND_URL, CONTAGION_SCALE, SELECTED_COUNTRY_KEY, fips_to_iso3, inject_theme, loading, metric_grid, risk_level
+import sys
+from pathlib import Path
 
-# NOTE: no st.set_page_config() / inject_theme() call here. Under
-# st.navigation, whichever page runs must call st.set_page_config() itself
-# as its own first Streamlit command (see main() below and each pages/*.py
-# file) so the browser tab title updates per page instead of staying fixed.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from data.iso3_to_fips import ISO3_TO_FIPS  # noqa: E402
+
+FIPS_TO_ISO3 = {v: k for k, v in ISO3_TO_FIPS.items() if v is not None}
+
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+# ---------------------------------------------------------------------------
+# Page config
+# ---------------------------------------------------------------------------
+
+st.set_page_config(
+    page_title="GeoPulse Risk Intelligence",
+    page_icon="🌍",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# ---------------------------------------------------------------------------
+# Custom CSS — intelligence-dashboard aesthetic
+# ---------------------------------------------------------------------------
+
+st.markdown("""
+<style>
+    :root {
+        --bg: #0d0d0d;
+        --surface: #141414;
+        --border: #2a2a2a;
+        --text: #e0e0e0;
+        --muted: #888;
+        --critical: #000000;
+        --high: #3b0000;
+        --elevated: #6b0000;
+        --moderate: #8b1a1a;
+        --low: #b22222;
+        --accent: #cc2222;
+    }
+
+    .stApp { background-color: var(--bg); color: var(--text); }
+    .metric-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 16px 20px;
+        margin: 4px 0;
+    }
+    .risk-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 3px;
+        font-size: 12px;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+    .badge-CRITICAL { background: #000; color: #ff4444; border: 1px solid #ff4444; }
+    .badge-HIGH     { background: #1a0000; color: #ff6b6b; }
+    .badge-ELEVATED { background: #2d0000; color: #ff9999; }
+    .badge-MODERATE { background: #3d1000; color: #ffaa77; }
+    .badge-LOW      { background: #0d1a0d; color: #66cc66; }
+    h1, h2, h3 { color: var(--text); font-family: 'Courier New', monospace; }
+    .sidebar .sidebar-content { background-color: var(--surface); }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -48,24 +110,127 @@ def fetch_heatmap() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=300)
-def fetch_escalation_alerts(min_risk: float = 0.60) -> list[dict]:
+@st.cache_data(ttl=120)
+def fetch_timeline(country: str, days: int = 90) -> pd.DataFrame:
     try:
-        resp = requests.get(f"{BACKEND_URL}/global/escalation_alerts", params={"min_risk": min_risk}, timeout=10)
+        resp = requests.get(
+            f"{BACKEND_URL}/country/{country}/timeline",
+            params={"days": days},
+            timeout=10,
+        )
         resp.raise_for_status()
-        return resp.json().get("alerts", [])
+        return pd.DataFrame(resp.json()["timeline"])
     except Exception:
-        return []
+        return pd.DataFrame()
 
 
-@st.cache_data(ttl=600)
-def fetch_gnn_network(min_weight: float = 0.20) -> dict:
+@st.cache_data(ttl=300)
+def fetch_risk_score(country: str) -> dict | None:
     try:
-        resp = requests.get(f"{BACKEND_URL}/global/gnn_network", params={"min_weight": min_weight}, timeout=20)
+        resp = requests.post(
+            f"{BACKEND_URL}/riskscore",
+            json={"country": country},
+            timeout=15,
+        )
         resp.raise_for_status()
         return resp.json()
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Risk color mapping
+# ---------------------------------------------------------------------------
+
+RISK_COLORS = {
+    "CRITICAL": "#000000",
+    "HIGH":     "#1a0000",
+    "ELEVATED": "#6b0000",
+    "MODERATE": "#8b1a1a",
+    "LOW":      "#2d4a2d",
+}
+
+def risk_color(score: float) -> str:
+    if score >= 0.80: return RISK_COLORS["CRITICAL"]
+    if score >= 0.65: return RISK_COLORS["HIGH"]
+    if score >= 0.50: return RISK_COLORS["ELEVATED"]
+    if score >= 0.35: return RISK_COLORS["MODERATE"]
+    return RISK_COLORS["LOW"]
+
+
+def risk_level(score: float) -> str:
+    if score >= 0.80: return "CRITICAL"
+    if score >= 0.65: return "HIGH"
+    if score >= 0.50: return "ELEVATED"
+    if score >= 0.35: return "MODERATE"
+    return "LOW"
+
+
+# ---------------------------------------------------------------------------
+# Highest-risk bar chart
+# ---------------------------------------------------------------------------
+
+TREND_COLORS = {
+    "increasing": "#d94040",  # red
+    "decreasing": "#4a7fb5",  # blue
+}
+STABLE_HIGH_COLOR = "#d9b23c"  # yellow, stable with risk > 0.5
+STABLE_LOW_COLOR = "#4caf50"   # green, stable with risk <= 0.5
+NONE_TREND_COLOR = "#000000"   # black, trend unknown
+
+
+def _bar_color(trend: str | None, risk_score: float) -> str:
+    if trend is None or (isinstance(trend, float) and math.isnan(trend)):
+        return NONE_TREND_COLOR
+    if trend == "stable":
+        return STABLE_HIGH_COLOR if risk_score > 0.5 else STABLE_LOW_COLOR
+    return TREND_COLORS.get(trend, NONE_TREND_COLOR)
+
+
+def build_risk_bar_chart(df: pd.DataFrame, visible_bars: int = 20) -> go.Figure:
+    """Bar chart of every tracked country's latest risk score, sorted
+    descending. Color encodes trend direction (and, for a stable trend,
+    whether risk is currently above or below the 0.5 midpoint) rather than
+    risk magnitude, since risk_score already drives bar height."""
+    if df.empty:
+        fig = go.Figure()
+        fig.update_layout(title="No data available", paper_bgcolor="#0d0d0d")
+        return fig
+
+    df = df.sort_values("risk_score", ascending=False).copy()
+    colors = [_bar_color(t, r) for t, r in zip(df["trend"], df["risk_score"])]
+    confidence_text = df["confidence"].map(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+    updated_text = df["feature_date"].astype(str) if "feature_date" in df.columns else ""
+    trend_text = df["trend"].fillna("unknown")
+
+    # Two raw country codes can resolve to the same display name (e.g. a
+    # legacy FIPS "US" row and an ISO3 "USA" row both showing "United
+    # States") when upstream data has both conventions for one country.
+    # A single Bar trace with a repeated x-category renders the bars
+    # stacked on top of each other rather than side by side, which looks
+    # like one impossible bar exceeding 1.0 -- disambiguate the label with
+    # the raw code so every bar gets its own x position instead.
+    dup_name = df["name"].duplicated(keep=False)
+    label = df["name"].where(~dup_name, df["name"] + " (" + df["country"].astype(str) + ")")
+
+    fig = go.Figure(go.Bar(
+        x=label, y=df["risk_score"], marker_color=colors,
+        customdata=list(zip(confidence_text, updated_text, trend_text)),
+        hovertemplate=(
+            "<b>%{x}</b><br>Risk: %{y:.4f}<br>Trend: %{customdata[2]}<br>"
+            "Confidence: %{customdata[0]}<br>Last update: %{customdata[1]}<extra></extra>"
+        ),
+    ))
+    fig.update_layout(
+        paper_bgcolor="#0d0d0d", plot_bgcolor="#0d0d0d", font=dict(color="#ccc"),
+        margin=dict(l=10, r=10, t=10, b=10), height=420,
+        yaxis=dict(title="Risk score", gridcolor="#333"),
+        xaxis=dict(
+            title="Country", range=[-0.5, visible_bars - 0.5],
+            rangeslider=dict(visible=True, thickness=0.08, bgcolor="#1a1a1a"),
+        ),
+    )
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -92,29 +257,29 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
         ),
         axis=1,
     )
-    # `country` is a FIPS 10-4 code (GDELT's native coding, e.g. "UP" for
-    # Ukraine) but Plotly's locationmode="ISO-3" needs ISO-3 (e.g. "UKR") —
-    # without this conversion the map renders with zero countries filled
-    # in, since none of the FIPS codes match any ISO-3 geometry.
-    df["iso3"] = df["country"].map(fips_to_iso3)
+
+    # `country` is mostly FIPS 10-4 (GDELT's coding, e.g. "UP" = Ukraine), which
+    # Plotly's ISO-3 location mode can't place; a few countries also have a
+    # duplicate ISO-3-coded row. Convert FIPS -> ISO-3 and keep one row per
+    # country, preferring the FIPS-coded one (the dominant convention).
+    df["iso3"] = df["country"].map(lambda c: c if len(c) == 3 else FIPS_TO_ISO3.get(c))
+    df = df.dropna(subset=["iso3"])
+    df = df.assign(_is_iso3=df["country"].str.len() == 3).sort_values("_is_iso3")
+    df = df.drop_duplicates("iso3", keep="first")
 
     fig = go.Figure(go.Choropleth(
         locations=df["iso3"],
         locationmode="ISO-3",
         z=df["risk_score"],
         text=df["text"],
-        # The FIPS code (not ISO-3), carried through click events so we can
-        # identify which country was clicked using the same code the rest
-        # of the app (session state, API calls) expects.
-        customdata=df["country"],
         hovertemplate="%{text}<extra></extra>",
         colorscale=[
-            [0.0,  "#2a3f2a"],    # Low    — muted green
-            [0.35, "#4a3a30"],    # Moderate — muted brown
-            [0.50, "#5c3a3a"],    # Elevated
-            [0.65, "#4a2e2e"],    # High
-            [0.80, "#332222"],    # Critical
-            [1.0,  "#1c1414"],    # Maximum — near-black, not pure black
+            [0.0,  "#1a3a1a"],    # Low    — dark green
+            [0.35, "#4a1a00"],    # Moderate
+            [0.50, "#6b0000"],    # Elevated
+            [0.65, "#3b0000"],    # High
+            [0.80, "#1a0000"],    # Critical
+            [1.0,  "#000000"],    # Maximum
         ],
         zmin=0.0,
         zmax=1.0,
@@ -129,29 +294,10 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
         marker=dict(line=dict(color="#1a1a1a", width=0.5)),
     ))
 
-    # Invisible click-target layer, centered on each country. The
-    # Choropleth trace itself does register clicks fine (Plotly's geo hit
-    # test needs a hover/mousemove to land first, same as any point-based
-    # trace — real mouse users always do this on the way to a click), but
-    # small countries can have only a few clickable pixels at typical
-    # zoom. This marker gives every country the same forgiving hit radius
-    # regardless of its on-screen size. Scattergeo accepts the same
-    # locations/locationmode as Choropleth, so no separate lat/lon lookup
-    # is needed to place it.
-    fig.add_trace(go.Scattergeo(
-        locations=df["iso3"],
-        locationmode="ISO-3",
-        mode="markers",
-        marker=dict(size=14, color="rgba(0,0,0,0.01)", line=dict(width=0)),
-        customdata=df["country"],
-        hoverinfo="skip",
-        showlegend=False,
-    ))
-
     fig.update_layout(
         title=dict(
             text="GLOBAL GEOPOLITICAL RISK MONITOR",
-            font=dict(size=18, color="#b2504f", family="Courier New"),
+            font=dict(size=18, color="#cc2222", family="Courier New"),
             x=0.5,
         ),
         geo=dict(
@@ -176,81 +322,71 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
 
 
 # ---------------------------------------------------------------------------
-# Global GNN network figure (full graph — the country-specific ego view
-# lives on the Country Drilldown page instead)
+# Timeline figure
 # ---------------------------------------------------------------------------
 
-def build_gnn_graph_full(network_data: dict, name_map: dict[str, str] | None = None) -> go.Figure:
-    nodes = network_data.get("nodes", [])
-    edges = network_data.get("edges", [])
+def build_timeline(df: pd.DataFrame, country: str) -> go.Figure:
+    if df.empty:
+        return go.Figure()
 
-    if not nodes:
-        fig = go.Figure()
-        fig.add_annotation(
-            text="No GNN network data. Run POST /analyze/gnn to compute.",
-            xref="paper", yref="paper", x=0.5, y=0.5,
-            showarrow=False, font=dict(color="#666", size=14),
-        )
-        fig.update_layout(
-            paper_bgcolor="#0d0d0d", plot_bgcolor="#0d0d0d",
-            xaxis=dict(showgrid=False, zeroline=False, visible=False),
-            yaxis=dict(showgrid=False, zeroline=False, visible=False),
-            height=500,
-        )
-        return fig
-
-    nm = name_map or {}
-    # Order the circle by network-adjusted risk (descending) so the layout
-    # itself carries meaning — sweeping clockwise from riskiest to safest.
-    # `.get(key, default)` only substitutes when the key is *missing* — the
-    # API can return an explicit null for a scored field, so `or 0` guards
-    # against that too (this crashed in production for a real country).
-    nodes_sorted = sorted(nodes, key=lambda n: -float(n.get("network_adjusted_risk") or n.get("risk_score") or 0))
-    n = len(nodes_sorted)
-    angles = [2 * math.pi * i / n for i in range(n)]
-    country_pos = {node["country"]: (math.cos(a), math.sin(a)) for node, a in zip(nodes_sorted, angles)}
+    df = df.copy()
+    df["feature_date"] = pd.to_datetime(df["feature_date"])
 
     fig = go.Figure()
-    for edge in edges:
-        src, dst, w = edge.get("source", ""), edge.get("target", ""), float(edge.get("weight") or 0)
-        if src not in country_pos or dst not in country_pos:
-            continue
-        x0, y0 = country_pos[src]
-        x1, y1 = country_pos[dst]
+
+    # Main risk score line
+    if "risk_score" in df.columns:
         fig.add_trace(go.Scatter(
-            x=[x0, x1, None], y=[y0, y1, None], mode="lines",
-            line=dict(color=f"rgba(178,80,79,{min(0.15 + w * 0.5, 0.85):.2f})", width=max(1, w * 4)),
-            hoverinfo="none", showlegend=False,
+            x=df["feature_date"],
+            y=df["risk_score"],
+            name="Risk Score",
+            line=dict(color="#cc2222", width=2.5),
+            fill="tozeroy",
+            fillcolor="rgba(204,34,34,0.10)",
         ))
 
-    country_codes  = [node["country"] for node in nodes_sorted]
-    country_names  = [nm.get(c, c) for c in country_codes]
-    x_nodes        = [country_pos[c][0] for c in country_codes]
-    y_nodes        = [country_pos[c][1] for c in country_codes]
-    risk_vals      = [float(node.get("network_adjusted_risk") or node.get("risk_score") or 0) for node in nodes_sorted]
-    contagion_vals = [float(node.get("contagion_score") or 0) for node in nodes_sorted]
-    node_sizes     = [max(7, 7 + 20 * r) for r in risk_vals]
+    # Component traces
+    component_colors = {
+        "violence_score":    ("Violence", "#8b0000"),
+        "protest_score":     ("Protests", "#b8860b"),
+        "diplomatic_stress": ("Diplo. Stress", "#4a4a8a"),
+        "terrorism_score":   ("Terrorism", "#6b2222"),
+    }
+    for col, (name, color) in component_colors.items():
+        if col in df.columns:
+            fig.add_trace(go.Scatter(
+                x=df["feature_date"],
+                y=df[col],
+                name=name,
+                line=dict(color=color, width=1, dash="dot"),
+                opacity=0.7,
+                visible="legendonly",
+            ))
 
-    hover_texts = [
-        f"<b>{name}</b><br>Network-adjusted risk: {r:.3f}<br>Contagion: {ct:.3f}"
-        for name, r, ct in zip(country_names, risk_vals, contagion_vals)
-    ]
-    fig.add_trace(go.Scatter(
-        x=x_nodes, y=y_nodes, mode="markers",
-        marker=dict(
-            size=node_sizes, color=contagion_vals, colorscale=CONTAGION_SCALE, cmin=0, cmax=1,
-            colorbar=dict(title=dict(text="Contagion", font=dict(color="#888")),
-                           tickfont=dict(color="#888"), bgcolor="#141414", bordercolor="#2a2a2a", len=0.6),
-            line=dict(color="#333", width=0.5),
-        ),
-        customdata=hover_texts, hovertemplate="%{customdata}<extra></extra>", showlegend=False,
-    ))
     fig.update_layout(
-        title="Full Network — arranged clockwise by risk (riskiest first)",
-        paper_bgcolor="#0d0d0d", plot_bgcolor="#0d0d0d",
-        xaxis=dict(showgrid=False, zeroline=False, visible=False, range=[-1.4, 1.4]),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False, range=[-1.4, 1.4]),
-        font=dict(color="#888"), height=600, margin=dict(l=20, r=20, t=60, b=20),
+        title=f"{country} — Risk Timeline",
+        xaxis=dict(
+            showgrid=True, gridcolor="#1a1a1a",
+            tickfont=dict(color="#888"),
+            title="",
+        ),
+        yaxis=dict(
+            range=[0, 1],
+            showgrid=True, gridcolor="#1a1a1a",
+            tickfont=dict(color="#888"),
+            title="Score (0–1)",
+            title_font=dict(color="#666"),
+        ),
+        paper_bgcolor="#0d0d0d",
+        plot_bgcolor="#0d0d0d",
+        legend=dict(
+            bgcolor="#141414",
+            bordercolor="#2a2a2a",
+            font=dict(color="#888", size=11),
+        ),
+        font=dict(color="#888"),
+        height=280,
+        margin=dict(l=60, r=20, t=40, b=40),
     )
     return fig
 
@@ -260,22 +396,14 @@ def build_gnn_graph_full(network_data: dict, name_map: dict[str, str] | None = N
 # ---------------------------------------------------------------------------
 
 def main():
-    st.set_page_config(
-        page_title="Global Risk Map — GeoPulse",
-        page_icon="🌍",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-    inject_theme()
-
     # Header
     st.markdown(
         "<h1 style='text-align:center; font-family:Courier New; "
-        "color:#b2504f; letter-spacing:3px; margin-bottom:4px;'>"
+        "color:#cc2222; letter-spacing:3px; margin-bottom:4px;'>"
         "⬛ GLOBAL RISK INTELLIGENCE</h1>"
         "<p style='text-align:center; color:#555; font-size:13px; "
         "font-family:Courier New; margin-top:0;'>"
-        f"Geopolitical Escalation Monitor · {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
+        f"Current Activity Monitor · {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
         "</p>",
         unsafe_allow_html=True,
     )
@@ -283,123 +411,137 @@ def main():
     st.divider()
 
     # ---- World Map ----
-    with loading("Loading global risk map..."):
-        df_heatmap = fetch_heatmap()
+    df_heatmap = fetch_heatmap()
     fig_map = build_choropleth(df_heatmap)
-    map_event = st.plotly_chart(
-        fig_map, use_container_width=True, config={"displayModeBar": False},
-        on_select="rerun", selection_mode="points", key="home_choropleth",
-    )
-    st.caption("Click a country on the map to open its full breakdown in Country Drilldown.")
-
-    # Clicking a country jumps straight to its Country Drilldown page. The
-    # session_state write must happen here, before any widget on *this*
-    # page run binds SELECTED_COUNTRY_KEY (none currently do, but this
-    # mirrors the same ordering rule used on the GNN network graph), and
-    # st.switch_page immediately navigates away so the write always lands
-    # before Country Drilldown's own country_picker ever instantiates.
-    points = []
-    if map_event:
-        sel = map_event.get("selection") if hasattr(map_event, "get") else getattr(map_event, "selection", None)
-        if sel:
-            points = sel.get("points") if hasattr(sel, "get") else getattr(sel, "points", [])
-    if points:
-        pt = points[0]
-        cd = pt.get("customdata") if hasattr(pt, "get") else getattr(pt, "customdata", None)
-        clicked_code = cd[0] if isinstance(cd, (list, tuple)) and cd else cd
-        if not clicked_code:
-            clicked_code = pt.get("location") if hasattr(pt, "get") else getattr(pt, "location", None)
-        if clicked_code:
-            st.session_state[SELECTED_COUNTRY_KEY] = clicked_code
-            st.switch_page(pg_drilldown)
+    st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
     # ---- Stats row ----
     if not df_heatmap.empty:
+        col1, col2, col3, col4 = st.columns(4)
         critical_count = int((df_heatmap["risk_score"] >= 0.80).sum())
         high_count     = int(((df_heatmap["risk_score"] >= 0.65) & (df_heatmap["risk_score"] < 0.80)).sum())
         avg_risk       = float(df_heatmap["risk_score"].mean())
 
-        metric_grid([
-            ("Countries Tracked", str(len(df_heatmap)), ""),
-            ("CRITICAL", str(critical_count), ""),
-            ("HIGH", str(high_count), ""),
-            ("Global Avg Risk", f"{avg_risk:.3f}", ""),
-        ])
+        with col1:
+            st.metric("Countries Tracked", len(df_heatmap))
+        with col2:
+            st.metric("CRITICAL", critical_count, delta=None)
+        with col3:
+            st.metric("HIGH", high_count)
+        with col4:
+            st.metric("Global Avg Risk", f"{avg_risk:.3f}")
+
+    st.caption(
+        "Scores are a heuristic index of each country's recent GDELT event mix (protest, violence, "
+        "diplomatic and economic stress, terrorism). They describe current activity; they are not "
+        "predictions and have not been validated as a measure of risk."
+    )
 
     st.divider()
+
+    # ---- Country drilldown ----
+    st.markdown("### Country Drilldown")
+
+    col_left, col_right = st.columns([1, 2])
+
+    with col_left:
+        if not df_heatmap.empty:
+            sorted_df = df_heatmap.sort_values("risk_score", ascending=False)
+            countries_list = sorted_df["country"].tolist()
+            # Build name lookup: code → display name
+            name_map = {}
+            if "name" in sorted_df.columns:
+                name_map = dict(zip(sorted_df["country"], sorted_df["name"]))
+        else:
+            countries_list = []
+            name_map = {}
+
+        selected = st.selectbox(
+            "Select Country",
+            countries_list,
+            format_func=lambda x: name_map.get(x, x),
+            key="home_country",
+        )
+
+        timeline_days = st.select_slider(
+            "Timeline Window",
+            options=[30, 60, 90, 180, 365],
+            value=90,
+        )
+
+        if selected:
+            # Use the same source as the map/table (latest_country_risk). The live
+            # /riskscore endpoint scores a 90-day window ending today, which is empty
+            # whenever ingestion lags, and then contradicts the map (e.g. CRITICAL on
+            # the map, LOW at 0% confidence here).
+            row = df_heatmap[df_heatmap["country"] == selected].iloc[0].to_dict()
+            pred = {
+                "risk_score": row["risk_score"],
+                "level": row.get("level", "UNKNOWN"),
+                "confidence": row.get("confidence") or 0,
+                "trend": row.get("trend") or "stable",
+                "name": row.get("name"),
+            }
+            if pred:
+                score       = pred.get("risk_score", 0)
+                level       = pred.get("level", "UNKNOWN")
+                conf        = pred.get("confidence", 0)
+                trend       = pred.get("trend", "stable")
+                display_name = pred.get("name") or name_map.get(selected, selected)
+                trend_arrow = {"increasing": "↑", "stable": "→", "decreasing": "↓"}.get(trend, "")
+
+                st.markdown(
+                    f"""
+                    <div class="metric-card">
+                        <div style="font-family:Courier New; font-size:11px; color:#555; letter-spacing:2px;">ACTIVITY INDEX</div>
+                        <div style="font-family:Courier New; font-size:14px; color:#888; margin-bottom:4px;">{display_name}</div>
+                        <div style="font-size:36px; font-weight:bold; color:#cc2222; margin:8px 0;">{score:.3f}</div>
+                        <span class="risk-badge badge-{level}">{level}</span>
+                        <span style="margin-left:8px; color:#888; font-size:13px;">{trend_arrow} {trend}</span>
+                        <div style="margin-top:12px; color:#666; font-size:12px;">
+                            Confidence: {conf:.0%}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
+    with col_right:
+        if selected:
+            df_timeline = fetch_timeline(selected, days=timeline_days)
+            display_label = name_map.get(selected, selected)
+            fig_timeline = build_timeline(df_timeline, display_label)
+            st.plotly_chart(fig_timeline, use_container_width=True,
+                            config={"displayModeBar": False})
+
+            # Feature breakdown
+            if not df_timeline.empty:
+                latest = df_timeline.iloc[-1]
+                st.markdown("**Latest Feature Snapshot**")
+                feat_cols = [
+                    ("protest_score", "Protests"),
+                    ("violence_score", "Violence"),
+                    ("diplomatic_stress", "Diplo. Stress"),
+                    ("economic_stress", "Econ. Stress"),
+                    ("terrorism_score", "Terrorism"),
+                    ("avg_sentiment", "Avg Sentiment"),
+                ]
+                fc1, fc2, fc3 = st.columns(3)
+                for i, (col, label) in enumerate(feat_cols):
+                    val = latest.get(col)
+                    if val is not None:
+                        [fc1, fc2, fc3][i % 3].metric(label, f"{float(val):.3f}")
 
     # ---- Top risk table ----
-    st.markdown("### Highest Risk Countries")
+    st.divider()
+    st.markdown("### Highest Activity Countries")
     if not df_heatmap.empty:
-        top_df = df_heatmap.sort_values("risk_score", ascending=False).head(20).copy()
+        top_df = df_heatmap.sort_values("risk_score", ascending=False).copy()
         if "name" not in top_df.columns:
             top_df["name"] = top_df["country"]
-        display_df = top_df[["name", "country", "risk_score", "confidence", "trend", "feature_date"]].copy()
-        display_df["risk_score"] = display_df["risk_score"].map(lambda x: f"{x:.4f}")
-        display_df["confidence"] = display_df["confidence"].map(
-            lambda x: f"{x:.2f}" if x is not None else "N/A"
-        )
-        display_df.columns = ["Country", "Code", "Risk Score", "Confidence", "Trend", "Last Updated"]
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    st.caption("For a single country's full breakdown — timeline, forecast, drivers, network, advisory — use **Country Drilldown** in the sidebar.")
-
-    st.divider()
-
-    # ---- Global Escalation Alerts (global-only; per-country forecasts live on Country Drilldown) ----
-    with st.expander("🚨 Global Escalation Alerts", expanded=False):
-        alert_thresh = st.slider("Alert Threshold", 0.40, 0.90, 0.60, 0.05, key="home_alert_thresh")
-        st.caption(f"Countries predicted to exceed risk {alert_thresh:.2f} in the next forecast period")
-        with loading("Loading escalation alerts..."):
-            alerts = fetch_escalation_alerts(alert_thresh)
-        if alerts:
-            df_alerts = pd.DataFrame(alerts)
-            if "country" in df_alerts.columns and not df_heatmap.empty and "name" in df_heatmap.columns:
-                name_lookup = dict(zip(df_heatmap["country"], df_heatmap["name"]))
-                df_alerts.insert(0, "Country", df_alerts["country"].map(lambda c: name_lookup.get(c, c)))
-            cols_show = [c for c in ["Country", "predicted_risk", "current_risk", "delta", "confidence", "target_date"]
-                         if c in df_alerts.columns]
-            if cols_show:
-                st.dataframe(
-                    df_alerts[cols_show].sort_values(
-                        "predicted_risk" if "predicted_risk" in df_alerts.columns else cols_show[0],
-                        ascending=False,
-                    ).head(20),
-                    use_container_width=True, hide_index=True,
-                )
-        else:
-            st.info("No escalation alerts. The forecaster may not be trained yet, or no countries exceed the threshold.")
-
-    # ---- Global Contagion Network (global-only; per-country ego view lives on Country Drilldown) ----
-    with st.expander("🕸️ Global Contagion Network", expanded=False):
-        min_weight = st.slider("Min Edge Weight", 0.10, 0.60, 0.20, 0.05, key="home_gnn_min_weight")
-        with loading("Loading GNN network graph..."):
-            network_data = fetch_gnn_network(min_weight)
-
-        if "error" in network_data:
-            st.info("No GNN network data available. Trigger POST /analyze/gnn to compute the graph.")
-        else:
-            name_lookup = dict(zip(df_heatmap["country"], df_heatmap["name"])) if not df_heatmap.empty and "name" in df_heatmap.columns else {}
-            fig_gnn = build_gnn_graph_full(network_data, name_lookup)
-            st.plotly_chart(fig_gnn, use_container_width=True, config={"displayModeBar": True})
-
-            nodes = network_data.get("nodes", [])
-            edges = network_data.get("edges", [])
-            if nodes:
-                avg_contagion = sum(n.get("contagion_score") or 0 for n in nodes) / max(len(nodes), 1)
-                metric_grid([
-                    ("Countries (Nodes)", str(len(nodes)), ""),
-                    ("Connections (Edges)", str(len(edges)), ""),
-                    ("Avg Contagion Score", f"{avg_contagion:.3f}", ""),
-                ])
-                st.markdown("**Highest Contagion Scores** (most risk imported)")
-                df_nodes = pd.DataFrame(nodes)
-                if "contagion_score" in df_nodes.columns:
-                    top_c = df_nodes.sort_values("contagion_score", ascending=False).head(10).copy()
-                    top_c.insert(0, "Country", top_c["country"].map(lambda c: name_lookup.get(c, c)))
-                    display_cols = [c for c in ["Country", "contagion_score", "risk_amplification",
-                                                "network_adjusted_risk", "risk_score"] if c in top_c.columns]
-                    st.dataframe(top_c[display_cols], use_container_width=True, hide_index=True)
+        st.plotly_chart(build_risk_bar_chart(top_df), use_container_width=True,
+                        config={"displayModeBar": False})
 
     # ---- Footer ----
     st.markdown(
@@ -412,20 +554,5 @@ def main():
     )
 
 
-# ---------------------------------------------------------------------------
-# Sidebar navigation — just two pages. Every country-level view (events,
-# forecast, spillover, GNN, RAG advisory) now lives as a tab on Country
-# Drilldown; only genuinely global-only views stay on the Global Risk Map
-# (as expanders: Escalation Alerts, Contagion Network).
-# ---------------------------------------------------------------------------
-
-pg_home         = st.Page(main, title="Global Risk Map", icon="🌍", default=True)
-pg_drilldown    = st.Page("pages/01_country_drilldown.py", title="Country Drilldown", icon="🔍")
-pg_intelligence = st.Page("pages/02_global_intelligence.py", title="Global Intelligence", icon="🌐")
-
-nav = st.navigation({
-    "Overview": [pg_home],
-    "Country Intelligence": [pg_drilldown],
-    "Global Intelligence": [pg_intelligence],
-})
-nav.run()
+if __name__ == "__main__":
+    main()

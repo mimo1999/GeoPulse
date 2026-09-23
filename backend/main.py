@@ -317,19 +317,22 @@ def get_country_timeline(
             # Anchor to the most recent data in DB rather than today's date,
             # so windows stay valid even when ingestion is behind schedule.
             cur.execute(
-                "SELECT MAX(feature_date) FROM country_daily_features WHERE country = %s",
+                "SELECT MAX(feature_date) FROM country_daily_features "
+                "WHERE country = %s AND risk_score IS NOT NULL",
                 (country,),
             )
             row = cur.fetchone()
             max_date = row["max"] if row and row["max"] else None
             since = (max_date or date.today()) - timedelta(days=days)
 
+            # Only scored rows: recent live-ingested rows can carry NULL risk_score,
+            # which would otherwise make the window land on unscored days and render empty.
             cur.execute("""
                 SELECT feature_date, risk_score, protest_score,
                        violence_score, diplomatic_stress, economic_stress,
                        terrorism_score, avg_sentiment, confidence
                 FROM country_daily_features
-                WHERE country = %s AND feature_date >= %s
+                WHERE country = %s AND feature_date >= %s AND risk_score IS NOT NULL
                 ORDER BY feature_date ASC
             """, (country, since))
             rows = cur.fetchall()
