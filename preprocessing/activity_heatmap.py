@@ -94,7 +94,7 @@ def country_activity_timeseries(conn, since: Optional[date] = None) -> list[tupl
 #
 # Same shape as country_activity() with country_iso3 replaced by (lat, lon);
 # 245,075 distinct points total, a bounded-since window will be far fewer.
-# Left undeveloped because usecase.md's own choropleth precedent
+# Left undeveloped because the existing choropleth precedent
 # (streamlit_app/ui.py) and country_summary.py's existing country-shaped
 # aggregates make the country-level view reusable immediately, while a
 # point map needs its own rendering choice (Plotly density_mapbox / kepler)

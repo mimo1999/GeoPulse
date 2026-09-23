@@ -8,7 +8,6 @@ receives as features (quad_class, event_root_code, event_base_code,
 avg_tone, num_mentions, actor country pair), over overlapping CAMEO code
 sets. Training on them measures how well the model reproduces a
 transformation of its own inputs, not whether it predicts anything real.
-See the circularity table in TODO.md.
 
 Additionally the label date equals the feature window's end date
 (models/multitask_dataset.py:136), so this is a same-day nowcast, not a

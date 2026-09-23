@@ -1,7 +1,7 @@
 """
 Country-level summary queries against graph.* (Postgres) -- the first of
 the three broadened use-case deliverables (country summaries, highlighted
-events, activity heatmap; see usecase.md's "Actual scope").
+events, activity heatmap).
 
 Deliberately Postgres-only, no Neo4j/Cypher: every query here is a plain
 aggregate over Event/Location/Actor/Country, answerable without graph
@@ -160,8 +160,8 @@ def top_counterparts(conn, iso3: str, limit: int = 10) -> list[tuple[str, int]]:
     empty: the real cross-border pairs were swamped by fabricated
     same-country ones, which the != iso3 filter then correctly stripped,
     leaving nothing. This is a scoped bug (the schema already carries the
-    information needed to avoid it), not usecase.md's named "generic
-    references" limitation."""
+    information needed to avoid it), not the known limitation that many actor references are too
+    generic to attribute."""
     with conn.cursor() as cur:
         cur.execute(_TOP_COUNTERPARTS_SQL, {"iso3": iso3, "limit": limit})
         return cur.fetchall()
@@ -178,8 +178,8 @@ def top_counterparts_by_type(conn, iso3: str, interaction_type: str, limit: int 
     top_counterparts() for the same country returns solid results (RUS,
     USA, GBR, ...). The aggregate across all types has enough genuine
     explicit-country data points to clear visibility; any single type's
-    slice usually doesn't. This is usecase.md's own named limitation
-    ("generic references... too general") showing up concretely, not a
+    slice usually doesn't. This is the known generic-actor-reference limitation
+    showing up concretely, not a
     further bug to chase -- callers (the UI included) must treat an empty
     result here as "not enough explicitly-attributed data for this split",
     not as an error."""
@@ -205,7 +205,7 @@ def build_country_summary(conn, iso3: str, since: Optional[date] = None,
     Default summary costs ~64s (mix+trend+counterparts); the by-type
     breakdown is opt-in for a caller that specifically wants it and can
     wait. The real fix is a materialized per-country rollup, not attempted
-    here -- see TODO.md."""
+    here."""
     trend = event_volume_trend(conn, iso3, since)
     mix = interaction_mix(conn, iso3, since)
     counterparts = top_counterparts(conn, iso3, limit=n_counterparts)

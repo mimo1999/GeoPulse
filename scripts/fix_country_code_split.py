@@ -20,7 +20,7 @@ after future ingestion.
 country_daily_features is NOT touched here -- it has 83 pre-existing FIPS-coded
 rows per country from the parquet-seeded path (seed_db_from_cache.py) that
 would collide on the (country, feature_date) PK with the renamed rows, and
-that table is being superseded by the UCDP PIT panel (TODO.md P0), not
+that table is being superseded by the UCDP PIT panel, not
 repaired in place.
 
 Usage:

@@ -101,7 +101,7 @@ class EventCleaner:
     # found). Historical gdelt_events rows were corrected with a one-time
     # UPDATE (scripts/fix_country_code_split.py); country_daily_features
     # retains the fragmentation on rows written before this fix -- it is
-    # superseded by the PIT panel (TODO.md P0) rather than repaired in place.
+    # superseded by the PIT panel rather than repaired in place.
     FIPS_TO_ISO: dict[str, str] = {}
 
     def __init__(

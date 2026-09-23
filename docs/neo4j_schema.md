@@ -1,6 +1,6 @@
 # Neo4j Graph Schema — Actor-Interaction Graph
 
-Design for usecase.md's core deliverable: *"Transform GDELT event data into a graph model
+Design for the project's core graph deliverable: *"Transform GDELT event data into a graph model
 representing actors and their interactions over time... analyze the resulting interaction
 network to identify patterns... and how they evolve over time."*
 
@@ -49,7 +49,7 @@ aggregation) native Cypher instead of string parsing.
 | `(:Event)-[:TARGETED]->(:Actor)` | Event → Actor | — | GDELT's `actor2` (the recipient), **optional** — 35.3M of 79.6M event-actor rows are `actor2`; the rest (44.3M `actor1`-only) are unilateral statements with no target. An `Event` with no outgoing `TARGETED` is a valid, expected shape, not a data gap. |
 | `(:Event)-[:OCCURRED_AT]->(:Location)` | Event → Location | — | |
 | `(:Location)-[:IN_COUNTRY]->(:Country)` | Location → Country | — | |
-| `(:Actor)-[:BELONGS_TO]->(:Country)` | Actor → Country | — | only when `country_iso3` is resolved (native or CAMEO-role-inferred); a genuinely unresolved actor has no outgoing `BELONGS_TO` — this is usecase.md's own named limitation ("generic references... too general"), and it should be an absent edge a Cypher query can detect, not a guessed one. |
+| `(:Actor)-[:BELONGS_TO]->(:Country)` | Actor → Country | — | only when `country_iso3` is resolved (native or CAMEO-role-inferred); a genuinely unresolved actor has no outgoing `BELONGS_TO` — this is the known limitation of GDELT actor coding ("generic references... too general"), and it should be an absent edge a Cypher query can detect, not a guessed one. |
 | `(:Actor)-[:CANONICAL_OF]->(:Actor)` | alias → canonical | — | entity-resolution linking (`canonical_actor_id`). Currently unused (0 rows in Postgres) — schema-supported, dormant. |
 
 ### Why Event stays a node (not collapsed into a direct Actor→Actor edge)

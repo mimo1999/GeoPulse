@@ -6,10 +6,9 @@ with a 2-digit root code (1-20), 3-4 digit base code, and a `quad_class`
 (1=Verbal Cooperation, 2=Material Cooperation, 3=Verbal Conflict,
 4=Material Conflict) that GDELT itself derives from the root code.
 
-usecase.md's Expected Outcome asks for CAMEO codes mapped to "interpretable
-interaction types (e.g., cooperation, consultation, conflict)". This module
-is that mapping. `consultation` (root 04) is broken out of `cooperation`
-specifically because the brief names it as its own category, not because
+This module maps CAMEO codes to interpretable interaction types
+(cooperation, consultation, conflict). `consultation` (root 04) is broken out of `cooperation`
+specifically because it is a distinct category in the target taxonomy, not because
 CAMEO treats it differently from the rest of quad_class 1 -- it doesn't.
 """
 
@@ -55,7 +54,7 @@ INTERACTION_TYPES = ("cooperation", "consultation", "conflict")
 
 
 def interaction_type(root_code: int | None, quad_class: int | None = None) -> str | None:
-    """Map a CAMEO root code (and/or quad_class) to one of usecase.md's three
+    """Map a CAMEO root code (and/or quad_class) to one of the three
     interaction types. root_code takes precedence when both are given, since
     it's the only way to isolate `consultation`; quad_class alone can still
     resolve cooperation-vs-conflict, just never consultation specifically.

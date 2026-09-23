@@ -1,5 +1,5 @@
 -- ============================================================
--- GeoPulse -- actor-interaction graph schema (usecase.md).
+-- GeoPulse -- actor-interaction graph schema.
 --
 -- This formalizes a schema that already existed live in this database from
 -- an earlier exploratory session, built by ad hoc scripts that were never
@@ -14,9 +14,9 @@
 -- staging tables for wiring in POLECAT and UCDP as additional sources later,
 -- entity-resolved against the same actor registry.
 --
--- New in this revision: `event.interaction_type`, backing usecase.md's
--- "map CAMEO event codes to interpretable interaction types (e.g.,
--- cooperation, consultation, conflict)". Computed in Python
+-- New in this revision: `event.interaction_type`, backing the mapping of
+-- CAMEO event codes to interpretable interaction types (e.g.,
+-- cooperation, consultation, conflict). Computed in Python
 -- (data/cameo_codes.py) rather than duplicated as SQL CASE logic, so there
 -- is exactly one place the CAMEO taxonomy is encoded.
 --

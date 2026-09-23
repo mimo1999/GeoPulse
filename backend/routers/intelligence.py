@@ -1,5 +1,5 @@
 """
-Global intelligence API -- the broadened use case (usecase.md): country
+Global intelligence API -- country
 summaries, highlighted events, activity heatmap, all backed by graph.*
 (Postgres). Independent of the parked PIT/risk-scoring routes in
 backend/main.py -- different data, different tables, mounted separately.

@@ -35,10 +35,8 @@ models/checkpoints/
 logs/
 *.log
 
-# Local notes and tooling config (kept on disk, not tracked)
+# Local tooling config (kept on disk, not tracked)
 .claude/
-TODO.md
-usecase.md
 
 # IDE
 .vscode/

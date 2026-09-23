@@ -2,8 +2,7 @@
 Integration tests for preprocessing/pit_labels.py against a live UCDP schema.
 
 Skipped entirely if Postgres isn't reachable, so a bare `pytest` run never
-breaks on missing infrastructure (see TODO.md P3 re: scripts/test_pg_conn.py,
-which made exactly that mistake). Run with the DB up to get real coverage:
+breaks on missing infrastructure. Run with the DB up to get real coverage:
 
     docker-compose up -d postgres   # or however Postgres is started locally
     pytest tests/test_pit_labels.py

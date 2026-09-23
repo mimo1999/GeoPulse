@@ -1,5 +1,5 @@
 """
-Thin Neo4j connection wrapper for the actor-interaction graph (usecase.md).
+Thin Neo4j connection wrapper for the actor-interaction graph.
 
 Local dev: a Neo4j Desktop instance (neo4j://127.0.0.1:7687). Prod: the
 `neo4j` service in docker/docker-compose.yml, same driver/config shape --

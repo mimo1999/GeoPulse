@@ -1,6 +1,6 @@
 """Tests for data/cameo_codes.py -- the CAMEO -> interaction-type mapping
-that backs usecase.md's "map CAMEO event codes to interpretable interaction
-types" requirement."""
+that maps CAMEO event codes to interpretable interaction
+types."""
 
 from __future__ import annotations
 

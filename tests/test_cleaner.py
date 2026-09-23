@@ -79,8 +79,7 @@ def test_filter_no_country(cleaner):
 def test_country_normalization(cleaner):
     # DEPRECATED normalization removed 2026-09-11: it rewrote 8 FIPS codes to
     # ISO (RS->RU etc.) while leaving ~250 others as FIPS, splitting every
-    # downstream consumer's country key space (see TODO.md, "Country-code
-    # key-space bug"). Codes now pass through unchanged except for uppercasing.
+    # downstream consumer's country key space (the country-code key-space bug). Codes now pass through unchanged except for uppercasing.
     row = _make_event(5, actor1_country="rs", action_geo_country="rs")
     clean, _ = cleaner.clean_batch([row])
     assert clean[0]["actor1_country"] == "RS"

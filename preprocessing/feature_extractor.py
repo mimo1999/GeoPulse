@@ -49,7 +49,7 @@ class FeatureExtractor:
     """
 
     # Single query for ALL countries on a date -- replaces the old
-    # one-query-per-country loop (TODO.md P1: "~35k round trips" over a
+    # one-query-per-country loop (~35k round trips over a
     # 162-day backfill). GROUP BY happens in Python (see
     # compute_daily_features) rather than in SQL because _compute_features'
     # category logic (protest/violence/terror flags, goldstein normalization)

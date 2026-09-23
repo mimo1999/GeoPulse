@@ -1,7 +1,7 @@
 """
 Builds the actor-interaction graph (graph.country/actor/location/event/
-event_actor) from gdelt_events, for usecase.md: "Transform GDELT event data
-into a graph model representing actors and their interactions over time."
+event_actor) from gdelt_events, to transform GDELT event data
+into a graph model representing actors and their interactions over time.
 
 Entity resolution (actor -> country):
     1. GDELT's own actor{1,2}_country field, when present -- this is GDELT's
@@ -14,8 +14,8 @@ Entity resolution (actor -> country):
        the event happened), not an invented heuristic.
     3. Otherwise: leave country_iso3 NULL, country_inferred = False. Never
        guess past what (1) or (2) can support -- this is exactly the
-       "generic references... too general" limitation usecase.md itself
-       calls out, and it should show up as NULLs a reader can query, not be
+       known limitation that many actor references are too generic to
+       attribute to a country, and it should show up as NULLs a reader can query, not be
        silently papered over.
 
 Actor identity is (source, raw_code, country_iso3) -- the same raw role code

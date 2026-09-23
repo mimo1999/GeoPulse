@@ -1,6 +1,5 @@
 """
-Integration test for the N+1 fix in preprocessing/feature_extractor.py
-(TODO.md P1). Skipped if Postgres isn't reachable -- see
+Integration test for the N+1 fix in preprocessing/feature_extractor.py. Skipped if Postgres isn't reachable -- see
 tests/test_pit_labels.py for the same pattern and rationale.
 """
 
@@ -46,8 +45,7 @@ def test_grouped_query_matches_raw_event_counts(conn):
     Does NOT assert country_daily_features' total row count for the date --
     that table is also written by ingestion/polecat_pipeline.py and the
     parquet-seeded path (scripts/seed_db_from_cache.py), on possibly
-    different, overlapping country-code conventions (see TODO.md's
-    country-code key-space note), so its row count for a date is not solely
+    different, overlapping country-code conventions, so its row count for a date is not solely
     a function of this extractor's input."""
     d = _a_date_with_events(conn)
     if d is None:

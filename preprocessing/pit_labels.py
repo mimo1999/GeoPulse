@@ -25,8 +25,7 @@ the plan).
 Writes a row for every (fips2, run_date) in scope -- including all zeros --
 so a missing row is never mistaken for a true negative. Single set-based
 queries (CROSS JOIN run_dates x countries, aggregated with one JOIN each),
-not one query per country per date -- that N+1 pattern is called out in
-TODO.md P1 for feature_extractor.py and is not worth repeating here.
+not one query per country per date -- that N+1 pattern (fixed in feature_extractor.py) is not worth repeating here.
 
 Usage:
     python -m preprocessing.pit_labels --start 2015-01-01 --end 2025-11-01

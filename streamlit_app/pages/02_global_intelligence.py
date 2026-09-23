@@ -1,5 +1,5 @@
 """
-Global Intelligence — the broadened use case (usecase.md): country
+Global Intelligence — country
 summaries, a highlighted-events feed, and an activity heatmap, all served
 by backend/routers/intelligence.py (graph.* / Postgres, independent of the
 parked PIT/risk-scoring pages).
@@ -48,7 +48,7 @@ def fetch_default_since() -> date:
     47.8M real, located events sitting in the same table."""
     try:
         # Generously timed: this query currently costs ~20-25s under load
-        # (contention with the concurrent Neo4j migration; see TODO.md) --
+        # (contention with the concurrent Neo4j migration) --
         # acceptable for a once-per-cache-window background fetch, not
         # acceptable to fail on and silently fall back to a wall-clock
         # default that lands in unresolvable data (the bug this exists to
