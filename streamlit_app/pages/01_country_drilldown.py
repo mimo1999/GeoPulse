@@ -2,7 +2,7 @@
 Phase 2 — Country Drilldown Page.
 
 Shows:
-  A. Risk Timeline (30d / 90d / 1yr)
+  A. Activity Timeline (30d / 90d / 1yr)
   B. Key Event Clusters (protest, military, terrorism, sanctions, diplomatic)
   C. Feature Attributions (Integrated Gradients)
   D. Spillover Network (top related countries)
@@ -202,7 +202,7 @@ def main():
 
     st.divider()
 
-    # ========== A. Risk Timeline ==========
+    # ========== A. Activity Timeline ==========
     st.markdown("### Activity Timeline")
     df_timeline = get_timeline(country, window)
     if not df_timeline.empty:
@@ -228,13 +228,13 @@ def main():
             for n in neighbors:
                 neighbor    = n.get("neighbor", "")
                 nb_name     = name_map.get(neighbor, neighbor)
-                weight      = n.get("spillover_weight", 0)
-                corr        = n.get("risk_correlation", 0)
+                weight      = n.get("spillover_weight") or 0
+                corr        = n.get("risk_correlation")
                 is_adj      = n.get("is_adjacent", False)
                 border_note = " 🗺️ border" if is_adj else ""
                 st.markdown(
                     f"**{nb_name}**{border_note}  \n"
-                    f"Spillover: `{weight:.3f}` · Corr: `{corr:.3f}`"
+                    f"Spillover: `{weight:.3f}`" + (f" · Corr: `{corr:.3f}`" if corr is not None else "")
                 )
 
         with col_r:
@@ -256,7 +256,7 @@ def _build_multitrace_timeline(df: pd.DataFrame, country: str) -> go.Figure:
     if "risk_score" in df:
         fig.add_trace(go.Scatter(
             x=df["feature_date"], y=df["risk_score"],
-            name="Risk Score", line=dict(color="#cc2222", width=2.5),
+            name="Activity Index", line=dict(color="#cc2222", width=2.5),
             fill="tozeroy", fillcolor="rgba(204,34,34,0.08)",
         ))
     for col, name, color in [
@@ -348,7 +348,7 @@ def _build_spillover_chart(
     nm      = name_map or {}
     labels  = [nm.get(n["neighbor"], n["neighbor"]) for n in neighbors]
     weights = [n["spillover_weight"] for n in neighbors]
-    corrs   = [n.get("risk_correlation", 0) for n in neighbors]
+    corrs   = [n.get("risk_correlation") for n in neighbors]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -356,19 +356,20 @@ def _build_spillover_chart(
         name="Spillover Weight",
         marker_color="#8b0000",
     ))
-    fig.add_trace(go.Scatter(
-        x=labels, y=[abs(c) for c in corrs],
-        name="|Risk Corr.|",
-        mode="markers",
-        marker=dict(color="#cc6622", size=10, symbol="diamond"),
-        yaxis="y",
-    ))
+    if any(c is not None for c in corrs):
+        fig.add_trace(go.Scatter(
+            x=labels, y=[abs(c) if c is not None else None for c in corrs],
+            name="|Risk Corr.|",
+            mode="markers",
+            marker=dict(color="#cc6622", size=10, symbol="diamond"),
+            yaxis="y",
+        ))
     fig.update_layout(
         title=f"Spillover Network — {country}",
         paper_bgcolor="#0d0d0d", plot_bgcolor="#0d0d0d",
         xaxis=dict(tickfont=dict(color="#ccc")),
         yaxis=dict(showgrid=True, gridcolor="#1a1a1a", tickfont=dict(color="#888"),
-                   title="Weight / |Correlation|", range=[0, 1]),
+                   title="Spillover weight", range=[0, 1]),
         legend=dict(bgcolor="#141414", bordercolor="#2a2a2a",
                     font=dict(color="#888")),
         font=dict(color="#888"), height=260,

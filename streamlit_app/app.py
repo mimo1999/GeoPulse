@@ -7,10 +7,10 @@ Layout:
   │   Black → Maroon → Crimson scale   │
   └────────────────────────────────────┘
   ┌──────────────┬─────────────────────┐
-  │ Country Info │ Risk Timeline       │
+  │ Country Info │ Activity Timeline   │
   └──────────────┴─────────────────────┘
   ┌────────────────────────────────────┐
-  │ Latest Escalation Events           │
+  │ Highest Activity Countries         │
   └────────────────────────────────────┘
 """
 
@@ -41,7 +41,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="GeoPulse Risk Intelligence",
+    page_title="GeoPulse Activity Monitor",
     page_icon="🌍",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -217,14 +217,14 @@ def build_risk_bar_chart(df: pd.DataFrame, visible_bars: int = 20) -> go.Figure:
         x=label, y=df["risk_score"], marker_color=colors,
         customdata=list(zip(confidence_text, updated_text, trend_text)),
         hovertemplate=(
-            "<b>%{x}</b><br>Risk: %{y:.4f}<br>Trend: %{customdata[2]}<br>"
+            "<b>%{x}</b><br>Index: %{y:.4f}<br>Trend: %{customdata[2]}<br>"
             "Confidence: %{customdata[0]}<br>Last update: %{customdata[1]}<extra></extra>"
         ),
     ))
     fig.update_layout(
         paper_bgcolor="#0d0d0d", plot_bgcolor="#0d0d0d", font=dict(color="#ccc"),
         margin=dict(l=10, r=10, t=10, b=10), height=420,
-        yaxis=dict(title="Risk score", gridcolor="#333"),
+        yaxis=dict(title="Activity index", gridcolor="#333"),
         xaxis=dict(
             title="Country", range=[-0.5, visible_bars - 0.5],
             rangeslider=dict(visible=True, thickness=0.08, bgcolor="#1a1a1a"),
@@ -250,7 +250,7 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
     df["text"] = df.apply(
         lambda r: (
             f"<b>{r['name']}</b><br>"
-            f"Risk: {r['risk_score']:.2f}<br>"
+            f"Index: {r['risk_score']:.2f}<br>"
             f"Level: {risk_level(r['risk_score'])}<br>"
             f"Confidence: {r.get('confidence', 0):.2f}<br>"
             f"Trend: {r.get('trend', 'N/A')}"
@@ -285,7 +285,7 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
         zmax=1.0,
         showscale=True,
         colorbar=dict(
-            title=dict(text="Risk Score", font=dict(color="#888")),
+            title=dict(text="Activity Index", font=dict(color="#888")),
             tickfont=dict(color="#888"),
             bgcolor="#141414",
             bordercolor="#2a2a2a",
@@ -296,7 +296,7 @@ def build_choropleth(df: pd.DataFrame) -> go.Figure:
 
     fig.update_layout(
         title=dict(
-            text="GLOBAL GEOPOLITICAL RISK MONITOR",
+            text="GLOBAL ACTIVITY MONITOR",
             font=dict(size=18, color="#cc2222", family="Courier New"),
             x=0.5,
         ),
@@ -339,7 +339,7 @@ def build_timeline(df: pd.DataFrame, country: str) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=df["feature_date"],
             y=df["risk_score"],
-            name="Risk Score",
+            name="Activity Index",
             line=dict(color="#cc2222", width=2.5),
             fill="tozeroy",
             fillcolor="rgba(204,34,34,0.10)",
@@ -364,7 +364,7 @@ def build_timeline(df: pd.DataFrame, country: str) -> go.Figure:
             ))
 
     fig.update_layout(
-        title=f"{country} — Risk Timeline",
+        title=f"{country} — Activity Timeline",
         xaxis=dict(
             showgrid=True, gridcolor="#1a1a1a",
             tickfont=dict(color="#888"),
@@ -396,14 +396,17 @@ def build_timeline(df: pd.DataFrame, country: str) -> go.Figure:
 # ---------------------------------------------------------------------------
 
 def main():
+    df_heatmap = fetch_heatmap()
+    as_of = str(df_heatmap["feature_date"].max()) if not df_heatmap.empty and "feature_date" in df_heatmap else "unknown"
+
     # Header
     st.markdown(
         "<h1 style='text-align:center; font-family:Courier New; "
         "color:#cc2222; letter-spacing:3px; margin-bottom:4px;'>"
-        "⬛ GLOBAL RISK INTELLIGENCE</h1>"
+        "⬛ GLOBAL ACTIVITY MONITOR</h1>"
         "<p style='text-align:center; color:#555; font-size:13px; "
         "font-family:Courier New; margin-top:0;'>"
-        f"Current Activity Monitor · {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
+        f"Activity Monitor · data as of {as_of}"
         "</p>",
         unsafe_allow_html=True,
     )
@@ -411,7 +414,6 @@ def main():
     st.divider()
 
     # ---- World Map ----
-    df_heatmap = fetch_heatmap()
     fig_map = build_choropleth(df_heatmap)
     st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
@@ -429,7 +431,7 @@ def main():
         with col3:
             st.metric("HIGH", high_count)
         with col4:
-            st.metric("Global Avg Risk", f"{avg_risk:.3f}")
+            st.metric("Global Avg Index", f"{avg_risk:.3f}")
 
     st.caption(
         "Scores are a heuristic index of each country's recent GDELT event mix (protest, violence, "
@@ -547,8 +549,8 @@ def main():
     st.markdown(
         "<hr style='border-color:#1a1a1a;'/>"
         "<p style='text-align:center; color:#333; font-size:11px; font-family:Courier New;'>"
-        "GeoPulse Risk Intelligence · Powered by GDELT · "
-        "Geopolitical analytics and escalation monitoring only · Not for operational targeting"
+        "GeoPulse Activity Monitor · Powered by GDELT · "
+        "Exploratory analytics only · Not for operational, safety or targeting decisions"
         "</p>",
         unsafe_allow_html=True,
     )
