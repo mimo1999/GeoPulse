@@ -7,7 +7,6 @@
 -- Extensions
 -- ---------------------
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;      -- fast text search
 CREATE EXTENSION IF NOT EXISTS btree_gin;    -- GIN on composite keys
@@ -210,20 +209,6 @@ SELECT create_hypertable(
     chunk_time_interval => INTERVAL '1 month',
     if_not_exists       => TRUE
 );
-
--- ============================================================
--- EVENT EMBEDDINGS  (pgvector – optional Phase 2)
--- ============================================================
-CREATE TABLE IF NOT EXISTS event_embeddings (
-    global_event_id     BIGINT      PRIMARY KEY,
-    event_date          DATE        NOT NULL,
-    embedding           vector(384),        -- all-MiniLM-L6-v2 dim
-    source_text         TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_emb_vector
-    ON event_embeddings USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
 
 -- ============================================================
 -- INGESTION AUDIT LOG

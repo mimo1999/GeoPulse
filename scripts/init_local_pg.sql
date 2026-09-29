@@ -1,3 +1,4 @@
+
 -- ============================================================
 -- GLDT Project — Local PostgreSQL 18 Init Script
 -- Plain PG18 schema (no TimescaleDB / PostGIS / pgvector).
@@ -195,55 +196,6 @@ CREATE TABLE IF NOT EXISTS ingestion_runs (
 );
 
 -- ============================================================
--- Phase 2: MULTI-TASK PROXY LABELS
--- ============================================================
-CREATE TABLE IF NOT EXISTS country_multitask_labels (
-    country             TEXT        NOT NULL,
-    label_date          DATE        NOT NULL,
-
-    instability_label   FLOAT       NOT NULL DEFAULT 0.0,
-    war_label           FLOAT       NOT NULL DEFAULT 0.0,
-    terrorism_label     FLOAT       NOT NULL DEFAULT 0.0,
-    financial_label     FLOAT       NOT NULL DEFAULT 0.0,
-
-    label_version       TEXT        NOT NULL DEFAULT 'v1',
-    event_count         INT         DEFAULT 0,
-    computed_at         TIMESTAMPTZ DEFAULT NOW(),
-
-    PRIMARY KEY (country, label_date)
-);
-
-CREATE INDEX IF NOT EXISTS idx_labels_date
-    ON country_multitask_labels (label_date DESC);
-CREATE INDEX IF NOT EXISTS idx_labels_war
-    ON country_multitask_labels (war_label DESC, label_date DESC);
-
--- ============================================================
--- Phase 2: FEATURE ATTRIBUTIONS
--- ============================================================
-CREATE TABLE IF NOT EXISTS feature_attributions (
-    id                  BIGSERIAL   PRIMARY KEY,
-    country             TEXT        NOT NULL,
-    attribution_date    DATE        NOT NULL,
-    method              TEXT        NOT NULL DEFAULT 'integrated_gradients',
-    model_version       TEXT        NOT NULL DEFAULT 'v0.1',
-
-    protest_attr        FLOAT,
-    violence_attr       FLOAT,
-    diplomatic_attr     FLOAT,
-    economic_attr       FLOAT,
-    terrorism_attr      FLOAT,
-    sentiment_attr      FLOAT,
-    goldstein_attr      FLOAT,
-
-    target_head         TEXT        DEFAULT 'risk_score',
-    computed_at         TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_attr_country_date
-    ON feature_attributions (country, attribution_date DESC);
-
--- ============================================================
 -- Phase 2: COUNTRY SPILLOVER NETWORK
 -- ============================================================
 CREATE TABLE IF NOT EXISTS country_spillover (
@@ -288,22 +240,6 @@ CREATE INDEX IF NOT EXISTS idx_clusters_country_date
     ON event_clusters (country, cluster_date DESC);
 
 -- ============================================================
--- Phase 2: ACTOR REGISTRY
--- ============================================================
-CREATE TABLE IF NOT EXISTS actor_registry (
-    actor_code          TEXT        PRIMARY KEY,
-    actor_name          TEXT,
-    actor_country       TEXT,
-    actor_type          TEXT,
-    mention_count       BIGINT      DEFAULT 0,
-    last_seen           DATE,
-    updated_at          TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_actor_country
-    ON actor_registry (actor_country, mention_count DESC);
-
--- ============================================================
 -- Phase 2: GDELT V2 INGESTION CURSOR
 -- ============================================================
 CREATE TABLE IF NOT EXISTS gdelt_v2_cursor (
@@ -319,23 +255,6 @@ CREATE TABLE IF NOT EXISTS gdelt_v2_cursor (
 
 CREATE INDEX IF NOT EXISTS idx_v2_cursor_status
     ON gdelt_v2_cursor (status, file_timestamp);
-
--- ============================================================
--- Phase 2: MODEL REGISTRY
--- ============================================================
-CREATE TABLE IF NOT EXISTS model_registry (
-    id                  SERIAL      PRIMARY KEY,
-    version             TEXT        UNIQUE NOT NULL,
-    phase               INT         NOT NULL DEFAULT 2,
-    checkpoint_path     TEXT,
-    train_loss          FLOAT,
-    val_loss            FLOAT,
-    test_loss           FLOAT,
-    num_params          INT,
-    hyperparams         JSONB,
-    trained_at          TIMESTAMPTZ DEFAULT NOW(),
-    is_active           BOOLEAN     DEFAULT FALSE
-);
 
 -- ============================================================
 -- HELPER VIEWS
@@ -368,19 +287,6 @@ FROM country_daily_features
 WHERE risk_score IS NOT NULL
 GROUP BY feature_date
 ORDER BY feature_date DESC;
-
-CREATE OR REPLACE VIEW labeled_countries AS
-SELECT
-    l.country,
-    MIN(l.label_date)       AS first_label,
-    MAX(l.label_date)       AS last_label,
-    COUNT(*)                AS label_days,
-    AVG(l.war_label)        AS avg_war_label,
-    AVG(l.terrorism_label)  AS avg_terror_label
-FROM country_multitask_labels l
-GROUP BY l.country
-HAVING COUNT(*) >= 30
-ORDER BY label_days DESC;
 
 CREATE OR REPLACE VIEW country_top_neighbors AS
 SELECT

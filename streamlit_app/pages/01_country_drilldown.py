@@ -4,9 +4,7 @@ Phase 2 — Country Drilldown Page.
 Shows:
   A. Activity Timeline (30d / 90d / 1yr)
   B. Key Event Clusters (protest, military, terrorism, sanctions, diplomatic)
-  C. Feature Attributions (Integrated Gradients)
   D. Spillover Network (top related countries)
-  E. Proxy Label Inspection
 """
 
 from __future__ import annotations
@@ -104,18 +102,6 @@ def get_spillover(country: str) -> list[dict]:
         return resp.json().get("neighbors", [])
     except Exception:
         return []
-
-
-@st.cache_data(ttl=300)
-def get_attributions(country: str) -> dict:
-    try:
-        resp = requests.get(
-            f"{BACKEND_URL}/country/{country}/attributions",
-            timeout=15,
-        )
-        return resp.json()
-    except Exception:
-        return {}
 
 
 @st.cache_data(ttl=120)
@@ -372,34 +358,6 @@ def _build_spillover_chart(
                    title="Spillover weight", range=[0, 1]),
         legend=dict(bgcolor="#141414", bordercolor="#2a2a2a",
                     font=dict(color="#888")),
-        font=dict(color="#888"), height=260,
-        margin=dict(l=60, r=20, t=40, b=40),
-    )
-    return fig
-
-
-def _build_label_chart(df: pd.DataFrame, country: str) -> go.Figure:
-    fig = go.Figure()
-    label_styles = [
-        ("instability_label", "Instability", "#cc2222"),
-        ("war_label",         "War",         "#8b0000"),
-        ("terrorism_label",   "Terrorism",   "#4b0000"),
-        ("financial_label",   "Financial",   "#3a5a7a"),
-    ]
-    for col, name, color in label_styles:
-        if col in df:
-            fig.add_trace(go.Scatter(
-                x=df["label_date"], y=df[col],
-                name=name, line=dict(color=color, width=1.5),
-            ))
-    fig.update_layout(
-        title=f"{country} — Proxy Labels (Training Ground Truth)",
-        paper_bgcolor="#0d0d0d", plot_bgcolor="#0d0d0d",
-        xaxis=dict(showgrid=True, gridcolor="#1a1a1a", tickfont=dict(color="#888")),
-        yaxis=dict(range=[0, 1], showgrid=True, gridcolor="#1a1a1a",
-                   tickfont=dict(color="#888")),
-        legend=dict(bgcolor="#141414", bordercolor="#2a2a2a",
-                    font=dict(color="#888", size=10)),
         font=dict(color="#888"), height=260,
         margin=dict(l=60, r=20, t=40, b=40),
     )
