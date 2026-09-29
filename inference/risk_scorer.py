@@ -15,12 +15,12 @@ from typing import Optional
 
 import numpy as np
 import psycopg2
-import torch
 
-from models.risk_model import HybridRiskTransformer
-from models.dataset import FEATURE_COLUMNS, NUM_FEATURES
+from preprocessing.normalizer import FEATURE_COLUMNS
 from advisory.rule_engine import AdvisoryEngine, RiskAdvisory
 from scoring.composite import DEFAULT_SCORER
+
+NUM_FEATURES = len(FEATURE_COLUMNS)
 
 logger = logging.getLogger("inference.scorer")
 
@@ -61,7 +61,7 @@ class RiskScorer:
 
     Usage::
 
-        scorer = RiskScorer(dsn=..., model_path=...)
+        scorer = RiskScorer(dsn=...)
         pred = scorer.score("Pakistan")
     """
 
@@ -100,31 +100,9 @@ class RiskScorer:
         )
     """
 
-    def __init__(
-        self,
-        dsn: str,
-        model_path: Optional[str] = None,
-        seq_len: int = 90,
-        mc_passes: int = 50,
-        device: str = "cpu",
-    ):
+    def __init__(self, dsn: str, seq_len: int = 90):
         self._dsn = dsn
         self._seq_len = seq_len
-        self._mc_passes = mc_passes
-        self._device = device
-
-        # Load model if available, otherwise use heuristic scorer
-        self._model: Optional[HybridRiskTransformer] = None
-        if model_path and Path(model_path).exists():
-            logger.info("Loading model from %s", model_path)
-            self._model = HybridRiskTransformer.load(model_path, device)
-            logger.info("Model loaded (%d params)", self._model.parameter_count())
-        else:
-            logger.warning(
-                "No model checkpoint found — using heuristic scoring. "
-                "Train a model and provide model_path for neural inference."
-            )
-
         self._advisory = AdvisoryEngine()
 
     # ------------------------------------------------------------------
@@ -148,11 +126,8 @@ class RiskScorer:
         feature_matrix, coverage_tier, last_real_date = self._load_features(country, as_of)
         trend = self._compute_trend(country, as_of)
 
-        if self._model is not None:
-            scores = self._neural_score(feature_matrix)
-        else:
-            recency_days = (as_of - last_real_date).days if last_real_date else None
-            scores = self._heuristic_score(feature_matrix, recency_days)
+        recency_days = (as_of - last_real_date).days if last_real_date else None
+        scores = self._heuristic_score(feature_matrix, recency_days)
 
         advisory = self._advisory.generate(
             country=country,
@@ -288,24 +263,6 @@ class RiskScorer:
     # Scoring methods
     # ------------------------------------------------------------------
 
-    def _neural_score(self, matrix: np.ndarray) -> dict[str, float]:
-        """Run neural inference with MC Dropout."""
-        tensor = torch.from_numpy(matrix).unsqueeze(0)     # (1, T, F)
-        mask = torch.ones(1, self._seq_len)                # all valid
-
-        out = self._model.predict_with_confidence(         # type: ignore[union-attr]
-            tensor, mask, n_passes=self._mc_passes,
-        )
-
-        return {
-            "instability": float(out["instability"].item()),
-            "war":         float(out["war"].item()),
-            "terrorism":   float(out["terrorism"].item()),
-            "financial":   float(out["financial"].item()),
-            "risk_score":  float(out["risk_score"].item()),
-            "confidence":  float(out["confidence"].item()),
-        }
-
     def _heuristic_score(
         self, matrix: np.ndarray, recency_days: Optional[int] = None
     ) -> dict[str, float]:
@@ -368,7 +325,7 @@ class RiskScorer:
                         "confidence":    pred.confidence,
                         "trend":         pred.trend,
                         "advisory_text": pred.advisory.advisory_text,
-                        "model_version": "v0.2-unified-heuristic" if self._model is None else "v0.1",
+                        "model_version": "v0.2-unified-heuristic",
                     },
                 )
             conn.close()

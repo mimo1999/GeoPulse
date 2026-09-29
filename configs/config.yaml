@@ -17,10 +17,6 @@ database:
   name: "gdelt_risk"
   user: "gldt"
   password: "gldt_secret"
-  pool_size: 10
-  max_overflow: 20
-  pool_timeout: 30
-  echo_sql: false
 
 # ---------------------
 # Neo4j (actor-interaction graph)
@@ -106,15 +102,6 @@ features:
 # Model
 # ---------------------
 model:
-  checkpoint_dir: "models/checkpoints"
-  sequence_length: 90                 # days of history
-  embedding_dim: 64
-  hidden_dim: 128
-  num_heads: 4
-  num_layers: 2
-  dropout: 0.1
-  mc_dropout_samples: 50             # Monte Carlo inference passes
-
   # Risk score weights (must sum to 1.0)
   risk_weights:
     instability: 0.40
@@ -148,7 +135,6 @@ api:
   cors_origins:
     - "http://localhost:8501"
     - "http://127.0.0.1:8501"
-  rate_limit_per_minute: 60
 
 # ---------------------
 # Streamlit

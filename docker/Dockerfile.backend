@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# System deps for psycopg2, shapely, etc.
+# System deps for psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create data dirs
-RUN mkdir -p data/raw data/processed models/checkpoints logs
+RUN mkdir -p data/raw data/processed logs
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

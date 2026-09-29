@@ -1,7 +1,7 @@
 """
 Seed the gdelt_risk database from the parquet feature cache.
 
-Run this after schema init (init_local_pg.sql + init_phase3.sql) to populate
+Run this after schema init (init_local_pg.sql) to populate
 country_daily_features and country_risk_predictions from the bi-weekly
 parquet snapshots in data/real_cache/.
 
@@ -40,7 +40,7 @@ logger = logging.getLogger("seed_db")
 # ---------------------------------------------------------------------------
 
 def compute_all(row: dict) -> tuple:
-    """Column semantics per scripts/train_real_data.py's FEATURE_NAMES /
+    """Column semantics per scripts/build_feature_cache.py's FEATURE_NAMES /
     models/forecaster_dataset.py's PARQUET_FEAT_COLS (the actual writers of
     this parquet cache): f0=protest, f1=violence, f2=diplo_stress,
     f3=economic_stress, f4=terrorism_score, f5=tone_neg (avg_sentiment),
@@ -51,7 +51,7 @@ def compute_all(row: dict) -> tuple:
     against a target built from swapped columns.
 
     Every column is percentile-ranked per day by percentile_normalize_day
-    (train_real_data.py) before being cached, and that function inverts f6
+    (build_feature_cache.py) before being cached, and that function inverts f6
     *before* ranking, so f6 is already higher = more conflictual. It needs no
     further inversion here (an earlier revision of this function applied
     1 - f6 and double-inverted it)."""
