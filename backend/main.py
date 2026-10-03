@@ -321,6 +321,7 @@ def get_global_heatmap():
                     LIMIT 1
                 ) p ON TRUE
                 WHERE l.risk_score IS NOT NULL
+                  AND char_length(l.country) = 2  -- FIPS keys only; older seeds also wrote 3-letter actor-country keys
                 ORDER BY l.risk_score DESC
             """)
             rows = cur.fetchall()
