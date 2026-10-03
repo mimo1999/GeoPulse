@@ -193,12 +193,11 @@ TAG_GOLDSTEIN = "Where people are looking"
 TAG_SPIKE = "What no one saw coming"
 
 
-def get_highlighted_events(conn, since: date, iso3: Optional[str] = None,
-                            limit_per_dimension: int = 20) -> list[HighlightedEvent]:
-    """All three dimensions, each event tagged with which one(s) it earned.
-    An event appearing in more than one top-N list keeps every tag it
-    earned -- not deduplicated to a single "reason", by design (see module
-    docstring)."""
+def merge_dimensions(media_rows: list[tuple], goldstein_rows: list[tuple],
+                      spike_rows: list[tuple[tuple, float]]) -> list[HighlightedEvent]:
+    """Combine the three per-dimension top-N lists into one feed. An event
+    appearing in more than one list keeps every tag it earned -- not
+    deduplicated to a single "reason", by design (see module docstring)."""
     by_id: dict[int, HighlightedEvent] = {}
 
     def _add(row: tuple, z: Optional[float], tag: str):
@@ -215,12 +214,22 @@ def get_highlighted_events(conn, since: date, iso3: Optional[str] = None,
         if z is not None:
             by_id[event_id].country_day_z_score = z
 
-    for row in top_media_events(conn, since, iso3, limit_per_dimension):
+    for row in media_rows:
         _add(row, None, TAG_MEDIA)
-    for row in top_goldstein_events(conn, since, iso3, limit_per_dimension):
+    for row in goldstein_rows:
         _add(row, None, TAG_GOLDSTEIN)
-    for row, z in top_spike_events(conn, iso3, since, limit_per_dimension):
+    for row, z in spike_rows:
         _add(row, z, TAG_SPIKE)
 
     # Most tags earned first; most recent as the tiebreak within that.
     return sorted(by_id.values(), key=lambda h: (-len(h.tags), -h.event_date.toordinal()))
+
+
+def get_highlighted_events(conn, since: date, iso3: Optional[str] = None,
+                            limit_per_dimension: int = 20) -> list[HighlightedEvent]:
+    """All three dimensions, each event tagged with which one(s) it earned."""
+    return merge_dimensions(
+        top_media_events(conn, since, iso3, limit_per_dimension),
+        top_goldstein_events(conn, since, iso3, limit_per_dimension),
+        top_spike_events(conn, iso3, since, limit_per_dimension),
+    )

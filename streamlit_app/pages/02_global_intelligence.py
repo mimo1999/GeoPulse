@@ -13,11 +13,12 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from ui import BACKEND_URL, inject_theme, loading, metric_grid
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from streamlit_app import data_source  # noqa: E402
+from ui import inject_theme, loading, metric_grid  # noqa: E402
 
 st.set_page_config(
     page_title="Global Intelligence — GeoPulse",
@@ -35,27 +36,16 @@ TAG_COLORS = {
 
 
 # ---------------------------------------------------------------------------
-# API helpers
+# Data helpers (live backend when reachable, otherwise the exported assets)
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=600)
 def fetch_default_since() -> date:
-    """Anchored to the data's own latest resolvable date via the backend
-    (backend/routers/intelligence.py's /meta), never wall-clock
-    date.today() -- a naive 90-days-from-today default landed inside the
-    ~1.1M events with no resolvable location (an untracked older data
-    source, kept rather than wiped) and showed "No data available" despite
-    47.8M real, located events sitting in the same table."""
+    """Anchored to the data's own latest resolvable date (the backend's /meta),
+    never wall-clock date.today(): the newest events may have no resolvable
+    location and would show an empty window."""
     try:
-        # Generously timed: this query currently costs ~20-25s under load
-        # (contention with the concurrent Neo4j migration) --
-        # acceptable for a once-per-cache-window background fetch, not
-        # acceptable to fail on and silently fall back to a wall-clock
-        # default that lands in unresolvable data (the bug this exists to
-        # avoid in the first place).
-        resp = requests.get(f"{BACKEND_URL}/intelligence/meta", timeout=60)
-        resp.raise_for_status()
-        return date.fromisoformat(resp.json()["default_since"])
+        return data_source.gi_default_since()
     except Exception as e:
         st.warning(f"Could not fetch data-anchored default window ({e}); using a wall-clock fallback "
                    "that may show no data.")
@@ -65,60 +55,36 @@ def fetch_default_since() -> date:
 @st.cache_data(ttl=600)
 def fetch_countries() -> list[str]:
     try:
-        resp = requests.get(f"{BACKEND_URL}/intelligence/countries", timeout=60)
-        resp.raise_for_status()
-        return resp.json()
+        return data_source.gi_countries()
     except Exception as e:
-        st.warning(f"Backend unavailable: {e}")
+        st.warning(f"Data unavailable: {e}")
         return []
 
 
 @st.cache_data(ttl=300)
 def fetch_heatmap(since: str) -> pd.DataFrame:
     try:
-        resp = requests.get(f"{BACKEND_URL}/intelligence/heatmap", params={"since": since}, timeout=60)
-        resp.raise_for_status()
-        return pd.DataFrame(resp.json())
+        return data_source.gi_heatmap(since)
     except Exception as e:
-        st.warning(f"Backend unavailable: {e}")
+        st.warning(f"Data unavailable: {e}")
         return pd.DataFrame()
 
 
 @st.cache_data(ttl=300)
 def fetch_highlighted(since: str, iso3: str | None) -> list[dict]:
     try:
-        params = {"since": since}
-        if iso3:
-            params["iso3"] = iso3
-        resp = requests.get(f"{BACKEND_URL}/intelligence/events/highlighted", params=params, timeout=60)
-        resp.raise_for_status()
-        return resp.json()
+        return data_source.gi_highlighted(since, iso3)
     except Exception as e:
-        st.warning(f"Backend unavailable: {e}")
+        st.warning(f"Data unavailable: {e}")
         return []
 
 
 @st.cache_data(ttl=300)
 def fetch_country_summary(iso3: str, since: str, include_by_type: bool = False) -> dict | None:
     try:
-        # Measured directly (2026-09-22, no concurrent load): mix ~24s,
-        # trend ~22s, top_counterparts ~18s -- ~64s default. The by-type
-        # breakdown (3x ~17s more, ~115s+ total, and frequently empty --
-        # see country_summary.py) is opt-in via include_by_type, fetched
-        # lazily only if the user opens that section. The real fix is a
-        # materialized per-country rollup, scoped as future work per the
-        # session's explicit anti-rabbit-hole goal, not attempted here.
-        resp = requests.get(
-            f"{BACKEND_URL}/intelligence/country/{iso3}/summary",
-            params={"since": since, "include_by_type": include_by_type},
-            timeout=150 if include_by_type else 60,
-        )
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        return resp.json()
+        return data_source.gi_country_summary(iso3, since, include_by_type)
     except Exception as e:
-        st.warning(f"Backend unavailable: {e}")
+        st.warning(f"Data unavailable: {e}")
         return None
 
 
@@ -214,7 +180,9 @@ def render_country_summary(summary: dict, iso3: str, since: str):
             "limit, not a loading error. Also "
             "slow (~50s, 3 expensive queries) -- loaded only on request, not by default."
         )
-        if st.button("Load breakdown by type", key=f"load_by_type_{iso3}"):
+        if not data_source.backend_available():
+            st.caption("Not available in the static snapshot.")
+        elif st.button("Load breakdown by type", key=f"load_by_type_{iso3}"):
             with loading(f"Loading by-type breakdown for {iso3} (up to ~90s)..."):
                 detailed = fetch_country_summary(iso3, since, include_by_type=True)
             if detailed:
@@ -239,22 +207,34 @@ st.markdown(
 )
 st.divider()
 
-since = st.sidebar.date_input("Window start", value=fetch_default_since())
+if data_source.backend_available():
+    since = st.sidebar.date_input("Window start", value=fetch_default_since())
+else:
+    windows = data_source.gi_windows()
+    days = st.sidebar.selectbox("Window", windows, index=windows.index(90) if 90 in windows else 0,
+                                format_func=lambda d: f"Last {d} days")
+    since = data_source.gi_since_for_window(days)
+    st.sidebar.caption(
+        f"Static snapshot: events through {data_source.meta().get('gi_latest_event_date')}, "
+        f"exported {data_source.meta().get('updated')}."
+    )
 since_str = since.isoformat()
 
 tab_heatmap, tab_events, tab_country = st.tabs(["🗺️ Activity Heatmap", "⚡ Highlighted Events", "🏳️ Country Summary"])
 
 with tab_heatmap:
-    metric = st.selectbox("Color by", ["total_events", "conflict_share", "avg_intensity", "total_mentions"])
+    # Fixed to the last 3 months, independent of the sidebar window (the backend's default window).
+    heat_since = fetch_default_since()
+    st.caption(f"Last 3 months, since {heat_since.isoformat()}")
+    metric = st.selectbox("Color by", ["total_events", "conflict_share", "avg_intensity", "total_mentions"], index=1)
     with loading("Loading activity heatmap..."):
-        df_heat = fetch_heatmap(since_str)
+        df_heat = fetch_heatmap(heat_since.isoformat())
     st.plotly_chart(build_activity_choropleth(df_heat, metric), use_container_width=True,
                      config={"displayModeBar": False})
     if not df_heat.empty:
         metric_grid([
-            ("Countries with activity", str(len(df_heat)), ""),
-            ("Total events", f"{df_heat['total_events'].sum():,}", ""),
-            ("Avg conflict share", f"{df_heat['conflict_share'].mean():.1%}", ""),
+            ("Countries with activity", str(len(df_heat)), "last 3 months"),
+            ("Avg conflict share", f"{df_heat['conflict_share'].mean():.1%}", "last 3 months"),
         ])
 
 with tab_events:
@@ -271,13 +251,12 @@ with tab_events:
 
 with tab_country:
     countries = fetch_countries()
-    st.caption(
-        "Can take up to ~60 seconds to load — every figure here is a live aggregate over "
-        "the full 48.9M-event dataset, not a precomputed rollup. A materialized per-country "
-        "rollup (like this project's existing country_daily_features table) is the planned "
-        "fix. The interaction-type breakdown below is even slower and loads "
-        "only on request."
-    )
+    if data_source.backend_available():
+        st.caption(
+            "Can take up to ~60 seconds to load: every figure here is a live aggregate over "
+            "the full event table. The interaction-type breakdown below is even slower and "
+            "loads only on request."
+        )
     if countries:
         # UKR, not USA, as the default -- USA is among the most expensive
         # queries in this dataset and a bad first impression on page load.

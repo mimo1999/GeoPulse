@@ -224,7 +224,12 @@ class GraphBuilder:
                            intensity, avg_tone, fatalities_best, fatalities_low, fatalities_high,
                            num_mentions, location_id, source_url, interaction_type
                        ) VALUES %s
-                       ON CONFLICT (source, source_event_id) DO NOTHING""",
+                       ON CONFLICT (source, source_event_id) DO UPDATE
+                           SET location_id = EXCLUDED.location_id,
+                               interaction_type = EXCLUDED.interaction_type
+                           WHERE graph.event.location_id IS NULL
+                             AND graph.event.interaction_type IS NULL
+                             AND EXCLUDED.location_id IS NOT NULL""",
                     event_rows,
                     page_size=5000,
                 )

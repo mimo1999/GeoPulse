@@ -49,3 +49,6 @@ Thumbs.db
 
 # Docker volumes (local)
 postgres_data/
+
+# Static-site build output (python scripts/build_static_site.py)
+site/

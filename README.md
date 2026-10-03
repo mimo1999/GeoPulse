@@ -86,6 +86,18 @@ Later cache builds can pass `--cache-only`. On Windows, `run_app.ps1` starts the
 - **Global Intelligence** also needs the `graph.*` tables populated from GDELT events (`ingestion/graph_builder.py`); without them its tabs are empty.
 - **Neo4j (optional):** run `python scripts/init_neo4j_schema.py`, then `ingestion/neo4j_migrator.py`. Connection settings are in `.env`.
 
+## Static site (GitHub Pages)
+
+The dashboard also runs with no backend or database, in the browser via [stlite](https://github.com/whitphx/stlite). When the backend is unreachable, `streamlit_app/data_source.py` reads the exported files in `assets/` instead.
+
+```bash
+python scripts/export_static_assets.py   # refresh assets/ from Postgres (home, gi, counterparts)
+python scripts/build_static_site.py      # assemble site/
+python -m http.server -d site 8600       # preview at http://localhost:8600
+```
+
+Pushing to `main` deploys `site/` through `.github/workflows/pages.yml` once Pages is set to the "GitHub Actions" source. The static build is a snapshot: Global Intelligence offers preset windows (30/90/180/365 days) instead of a date picker, and the by-interaction-type counterpart breakdown is not available.
+
 ## Tests
 
 ```bash

@@ -17,13 +17,11 @@ Layout:
 from __future__ import annotations
 
 import math
-import os
 from datetime import datetime, timedelta
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 
 import sys
@@ -31,10 +29,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from data.iso3_to_fips import ISO3_TO_FIPS  # noqa: E402
+from streamlit_app import data_source  # noqa: E402
 
 FIPS_TO_ISO3 = {v: k for k, v in ISO3_TO_FIPS.items() if v is not None}
-
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -101,41 +98,18 @@ st.markdown("""
 @st.cache_data(ttl=300)
 def fetch_heatmap() -> pd.DataFrame:
     try:
-        resp = requests.get(f"{BACKEND_URL}/global/heatmap", timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        return pd.DataFrame(data["countries"])
+        return data_source.heatmap()
     except Exception as e:
-        st.warning(f"Backend unavailable: {e}")
+        st.warning(f"Data unavailable: {e}")
         return pd.DataFrame()
 
 
 @st.cache_data(ttl=120)
 def fetch_timeline(country: str, days: int = 90) -> pd.DataFrame:
     try:
-        resp = requests.get(
-            f"{BACKEND_URL}/country/{country}/timeline",
-            params={"days": days},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return pd.DataFrame(resp.json()["timeline"])
+        return data_source.timeline(country, days)
     except Exception:
         return pd.DataFrame()
-
-
-@st.cache_data(ttl=300)
-def fetch_risk_score(country: str) -> dict | None:
-    try:
-        resp = requests.post(
-            f"{BACKEND_URL}/riskscore",
-            json={"country": country},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +373,7 @@ def main():
     df_heatmap = fetch_heatmap()
     as_of = str(df_heatmap["feature_date"].max()) if not df_heatmap.empty and "feature_date" in df_heatmap else "unknown"
 
+    updated = "" if data_source.backend_available() else data_source.meta().get("updated", "")
     # Header
     st.markdown(
         "<h1 style='text-align:center; font-family:Courier New; "
@@ -406,7 +381,7 @@ def main():
         "⬛ GLOBAL ACTIVITY MONITOR</h1>"
         "<p style='text-align:center; color:#555; font-size:13px; "
         "font-family:Courier New; margin-top:0;'>"
-        f"Activity Monitor · data as of {as_of}"
+        f"Activity Monitor · data as of {as_of}" + (f" · site updated {updated}" if updated else "") +
         "</p>",
         unsafe_allow_html=True,
     )

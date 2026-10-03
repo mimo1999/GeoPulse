@@ -15,7 +15,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-import requests
 import streamlit as st
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
@@ -220,6 +219,7 @@ SELECTED_COUNTRY_KEY = "gp_selected_country"
 @st.cache_data(ttl=300)
 def fetch_countries() -> tuple[list[str], dict[str, str]]:
     try:
+        import requests
         resp = requests.get(f"{BACKEND_URL}/countries", timeout=10)
         resp.raise_for_status()
         entries = resp.json().get("countries", [])
