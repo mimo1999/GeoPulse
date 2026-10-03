@@ -124,3 +124,30 @@ def test_bare_role_actor_gets_inferred_country(raw_conn, builder):
         )
         n = cur.fetchone()[0]
     assert n > 0, "expected at least one bare-role GOV actor with an inferred country"
+
+
+def test_rebuild_fills_in_rows_missing_location_and_type(raw_conn, builder):
+    """Rows loaded before location/interaction_type existed (the June-2026
+    prototype) must be filled in on rebuild, not silently skipped by the upsert."""
+    with raw_conn.cursor() as cur:
+        cur.execute(
+            """UPDATE graph.event SET location_id = NULL, interaction_type = NULL
+               WHERE event_id IN (SELECT event_id FROM graph.event
+                                  WHERE source = 'gdelt' AND event_date = %s AND location_id IS NOT NULL
+                                  LIMIT 5)
+               RETURNING event_id""",
+            (TEST_DATE,),
+        )
+        ids = [r[0] for r in cur.fetchall()]
+    raw_conn.commit()
+    assert ids
+
+    builder.build_date(TEST_DATE)
+
+    with raw_conn.cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) FROM graph.event WHERE event_id = ANY(%s) AND location_id IS NOT NULL "
+            "AND interaction_type IS NOT NULL",
+            (ids,),
+        )
+        assert cur.fetchone()[0] == len(ids)

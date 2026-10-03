@@ -1,24 +1,22 @@
 """
-Phase 2 — Country Drilldown Page.
+Country Drilldown Page.
 
 Shows:
   A. Activity Timeline (30d / 90d / 1yr)
-  B. Key Event Clusters (protest, military, terrorism, sanctions, diplomatic)
-  D. Spillover Network (top related countries)
+  B. Related countries (correlated activity)
 """
 
 from __future__ import annotations
 
-import os
-from datetime import datetime, timedelta
+import sys
+from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
-import requests
 import streamlit as st
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from streamlit_app import data_source  # noqa: E402
 
 st.set_page_config(
     page_title="Country Drilldown — GeoPulse",
@@ -43,51 +41,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# API helpers
+# Data helpers
 # ---------------------------------------------------------------------------
-
-@st.cache_data(ttl=300)
-def get_countries() -> tuple[list[str], dict[str, str]]:
-    """Return (list_of_codes, code→name mapping)."""
-    try:
-        resp = requests.get(f"{BACKEND_URL}/countries", timeout=10)
-        entries = resp.json().get("countries", [])
-        codes   = [r["country"] for r in entries]
-        names   = {r["country"]: r.get("name", r["country"]) for r in entries}
-        return codes, names
-    except Exception:
-        return [], {}
-
 
 @st.cache_data(ttl=120)
 def get_timeline(country: str, days: int) -> pd.DataFrame:
     try:
-        resp = requests.get(
-            f"{BACKEND_URL}/country/{country}/timeline",
-            params={"days": days}, timeout=10,
-        )
-        return pd.DataFrame(resp.json().get("timeline", []))
+        return data_source.timeline(country, days)
     except Exception:
         return pd.DataFrame()
-
-
-@st.cache_data(ttl=120)
-def get_events(country: str, days: int) -> list[dict]:
-    try:
-        resp = requests.get(
-            f"{BACKEND_URL}/country/{country}/events",
-            params={"days": days}, timeout=10,
-        )
-        return resp.json().get("events", [])
-    except Exception:
-        return []
 
 
 @st.cache_data(ttl=300)
 def get_heatmap() -> pd.DataFrame:
     try:
-        resp = requests.get(f"{BACKEND_URL}/global/heatmap", timeout=10)
-        return pd.DataFrame(resp.json().get("countries", []))
+        return data_source.heatmap()
     except Exception:
         return pd.DataFrame()
 
@@ -95,25 +63,9 @@ def get_heatmap() -> pd.DataFrame:
 @st.cache_data(ttl=300)
 def get_spillover(country: str) -> list[dict]:
     try:
-        resp = requests.get(
-            f"{BACKEND_URL}/country/{country}/spillover",
-            params={"top_n": 6}, timeout=10,
-        )
-        return resp.json().get("neighbors", [])
+        return data_source.spillover(country, top_n=6)
     except Exception:
         return []
-
-
-@st.cache_data(ttl=120)
-def get_risk_score(country: str) -> dict:
-    try:
-        resp = requests.post(
-            f"{BACKEND_URL}/riskscore",
-            json={"country": country}, timeout=15,
-        )
-        return resp.json()
-    except Exception:
-        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +180,7 @@ def main():
             st.plotly_chart(fig_spill, use_container_width=True,
                             config={"displayModeBar": False})
     else:
-        st.info("No spillover data. Run POST /analyze/spillover to compute.")
+        st.info("No related-country data for this country.")
 
 
 
