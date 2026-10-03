@@ -77,8 +77,13 @@ def export_home() -> dict:
                 spill.append(pd.DataFrame(r.json()["neighbors"]).assign(country=country))
 
         timeline = pd.concat(timelines, ignore_index=True)
+        # Keep only countries present in the most recent snapshots. Rows for codes the current
+        # build no longer produces (e.g. 3-letter actor-country keys) can linger in the database.
+        recent_files = sorted((ROOT / "data" / "real_cache").glob("*_features.parquet"))[-3:]
+        current = set().union(*(set(pd.read_parquet(f, columns=["country"])["country"]) for f in recent_files))
+        timeline = timeline[timeline["country"].isin(current)]
         timeline.to_csv(OUT / "timelines.csv", index=False)
-        print(f"timelines.csv: {len(timeline)} rows, {len(timelines)} countries")
+        print(f"timelines.csv: {len(timeline)} rows, {timeline['country'].nunique()} countries")
 
         # Latest snapshot per country; trend and name come from the API, level is re-derived.
         latest = timeline.sort_values("feature_date").groupby("country").tail(1).set_index("country")

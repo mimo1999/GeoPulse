@@ -8,7 +8,7 @@ GeoPulse ingests GDELT event data into PostgreSQL, derives per-country features,
 
 ## What it does
 
-**Home and Country Drilldown** show a per-country activity index: a single 0-1 value built from the mix of events GDELT recorded for the country (protest, violence, diplomatic and economic stress, terrorism). It is a hand-weighted heuristic, not fitted to outcomes, and its `confidence` value reflects data coverage only. The Home bar chart is colored by trend: red increasing, blue decreasing, yellow stable above 0.5, green stable below 0.5, black unknown.
+**Home and Country Drilldown** show a per-country activity index: a single 0-1 value built from the events GDELT recorded for the country (protest, violence, diplomatic and economic stress, terrorism). The protest, violence and terrorism inputs blend each country's share of such events with how many there were, and the stored value is the mean of its last three bi-weekly snapshots. It is a hand-weighted heuristic, not fitted to outcomes, and its `confidence` value reflects data coverage only. The Home bar chart is colored by trend: red increasing, blue decreasing, yellow stable above 0.5, green stable below 0.5, black unknown.
 
 **Global Intelligence** is built directly on the ~49M-event `graph.*` tables:
 
@@ -108,14 +108,14 @@ Database-backed tests skip themselves when Postgres or Neo4j is unreachable. `te
 
 ## Known limitations
 
-- **The activity index is a heuristic.** Weights are hand-picked and unvalidated.
+- **The activity index is a weak heuristic.** Weights are hand-picked. Scored against UCDP fatalities for the same month (72 snapshots, 2023-2025) it reaches a Spearman correlation of about 0.37, so it is an activity ranking, not a measure of danger. It will not reliably place the countries with the most deaths first.
 - **Sparse coverage.** GDELT coverage is uneven, so countries with little coverage score less reliably.
 - **`avg_sentiment` and `avg_goldstein` are inconsistent** across the pipelines that write them (seed script, live ingestion, POLECAT), so they are left out of every scoring path that reads them back from the database. Only the parquet-seeding script, which sees the original values, uses them.
 - **No network analysis.** The event graph is loaded into Neo4j, but no graph analysis (communities, influence over time) exists, and the Graph Data Science plugin is not installed.
-- **Data window.** The seeded activity index ends in March 2026 and the `graph.*` event data in February 2026.
+- **Data window.** The activity index and the `graph.*` event data run through the GDELT file for 2026-10-02.
 - **Country Summary is slow** (about 20-60 seconds), because every figure is a live aggregate over the full event table.
 - **Counterparts are sparse.** GDELT rarely gives an explicit country for the other side of an interaction, so by-type counterpart breakdowns are often empty.
-- **Duplicate country codes.** A few countries appear under both a FIPS and an ISO-3 code with different scores. The dashboard disambiguates them but the data is not merged.
+- **Incomplete history before September 2025.** An earlier ingestion skipped about every second day, so 2023 to August 2025 holds roughly half the events and its monthly volumes read low.
 
 Earlier forecasting, GNN, RAG-advisory, and conflict-prediction experiments were removed from the tree (commit "remove the parked ML stack") and remain in git history.
 

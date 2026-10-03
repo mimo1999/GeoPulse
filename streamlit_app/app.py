@@ -409,9 +409,9 @@ def main():
             st.metric("Global Avg Index", f"{avg_risk:.3f}")
 
     st.caption(
-        "Scores are a heuristic index of each country's recent GDELT event mix (protest, violence, "
-        "diplomatic and economic stress, terrorism). They describe current activity; they are not "
-        "predictions and have not been validated as a measure of risk."
+        "Scores are a heuristic index of each country's recent GDELT events (protest, violence, "
+        "diplomatic and economic stress, terrorism), averaged over its last three snapshots. They "
+        "describe recent activity; they are not predictions and only loosely track conflict deaths."
     )
 
     st.divider()
